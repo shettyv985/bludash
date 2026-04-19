@@ -10,6 +10,7 @@ interface Post {
   createdTime: string;
   permalink: string;
   thumbnail: string | null;
+  mediaUrl: string | null;       // ← direct video URL for inline playback
   type: string;
   reach: number;
   likes: number;
@@ -581,9 +582,12 @@ export default function SocialMediaReport({ client, from, to, platform, dark, on
       setStep(0); setProgress(10);
       await new Promise(r => setTimeout(r, 400));
 
+      // ── Facebook posts ────────────────────────────────────────────────────
       if (platform === "FB" || platform === "BOTH") {
         setStep(1); setProgress(20);
-        const fbRes  = await fetch(`${BASE}/${cfg.fbPageId}/posts?fields=id,message,created_time,permalink_url,full_picture&since=${from}&until=${to}&limit=100&access_token=${cfg.token}`);
+
+        // Request `source` so we get the direct video URL for reels/videos
+        const fbRes  = await fetch(`${BASE}/${cfg.fbPageId}/posts?fields=id,message,created_time,permalink_url,full_picture,attachments{media_type,media{source}}&since=${from}&until=${to}&limit=100&access_token=${cfg.token}`);
         const fbData = await fbRes.json();
         const rawFB  = fbData.data || [];
 
@@ -602,17 +606,46 @@ export default function SocialMediaReport({ client, from, to, platform, dark, on
             const comments = comm?.comments?.summary?.total_count   || 0;
             const shares   = share?.shares?.count || 0;
             const engagementRate = reach > 0 ? (((likes + comments + shares) / reach) * 100).toFixed(2) : "0.00";
-            const isReel = post.permalink_url?.includes("/reel/");
-            return { id: post.id, message: post.message || "", createdTime: post.created_time, permalink: post.permalink_url, thumbnail: post.full_picture || null, type: isReel ? "REEL" : "IMAGE", reach, likes, comments, shares, saves: 0, engagementRate };
+            const isReel   = post.permalink_url?.includes("/reel/") || post.permalink_url?.includes("/videos/");
+
+            // Extract direct video source from attachments
+            const attachmentMedia = post.attachments?.data?.[0]?.media;
+            const mediaUrl: string | null = attachmentMedia?.source || null;
+
+            return {
+              id: post.id,
+              message: post.message || "",
+              createdTime: post.created_time,
+              permalink: post.permalink_url,
+              thumbnail: post.full_picture || null,
+              mediaUrl,
+              type: isReel ? "REEL" : "IMAGE",
+              reach, likes, comments, shares,
+              saves: 0,
+              engagementRate,
+            };
           } catch {
-            const isReel = post.permalink_url?.includes("/reel/");
-            return { id: post.id, message: post.message || "", createdTime: post.created_time, permalink: post.permalink_url, thumbnail: null, type: isReel ? "REEL" : "IMAGE", reach: 0, likes: 0, comments: 0, shares: 0, saves: 0, engagementRate: "0.00" };
+            const isReel = post.permalink_url?.includes("/reel/") || post.permalink_url?.includes("/videos/");
+            return {
+              id: post.id,
+              message: post.message || "",
+              createdTime: post.created_time,
+              permalink: post.permalink_url,
+              thumbnail: null,
+              mediaUrl: null,
+              type: isReel ? "REEL" : "IMAGE",
+              reach: 0, likes: 0, comments: 0, shares: 0, saves: 0,
+              engagementRate: "0.00",
+            };
           }
         }));
       }
 
+      // ── Instagram posts ───────────────────────────────────────────────────
       if (platform === "IG" || platform === "BOTH") {
         setStep(2); setProgress(65);
+
+        // Request media_url — this is the direct video URL for reels
         const igRes  = await fetch(`${BASE}/${cfg.igUserId}/media?fields=id,caption,media_type,timestamp,permalink,media_url,thumbnail_url&since=${from}&until=${to}&limit=100&access_token=${cfg.token}`);
         const igData = await igRes.json();
         const rawIG  = igData.data || [];
@@ -630,6 +663,11 @@ export default function SocialMediaReport({ client, from, to, platform, dark, on
             const saves    = getValue("saved");
             const engagementRate = reach > 0 ? (((likes + comments + shares + saves) / reach) * 100).toFixed(2) : "0.00";
             const mediaType = post.media_type === "VIDEO" ? "REEL" : post.media_type === "CAROUSEL_ALBUM" ? "CAROUSEL" : "IMAGE";
+
+            // media_url is the direct video URL for reels/videos; thumbnail_url is the cover image
+            const mediaUrl: string | null   = (mediaType === "REEL" || mediaType === "IMAGE") ? (post.media_url || null) : null;
+            const thumbnail: string | null  = post.thumbnail_url || (mediaType !== "REEL" ? post.media_url : null) || null;
+
             let avgWatchTime = null;
             if (mediaType === "REEL") {
               try {
@@ -639,9 +677,31 @@ export default function SocialMediaReport({ client, from, to, platform, dark, on
                 if (val) avgWatchTime = Math.round(val / 1000);
               } catch {}
             }
-            return { id: post.id, message: post.caption || "", createdTime: post.timestamp, permalink: post.permalink, thumbnail: post.thumbnail_url || post.media_url || null, type: mediaType, reach, likes, comments, shares, saves, engagementRate, avgWatchTime };
+
+            return {
+              id: post.id,
+              message: post.caption || "",
+              createdTime: post.timestamp,
+              permalink: post.permalink,
+              thumbnail,
+              mediaUrl,
+              type: mediaType,
+              reach, likes, comments, shares, saves,
+              engagementRate,
+              avgWatchTime,
+            };
           } catch {
-            return { id: post.id, message: post.caption || "", createdTime: post.timestamp, permalink: post.permalink, thumbnail: null, type: "IMAGE", reach: 0, likes: 0, comments: 0, shares: 0, saves: 0, engagementRate: "0.00" };
+            return {
+              id: post.id,
+              message: post.caption || "",
+              createdTime: post.timestamp,
+              permalink: post.permalink,
+              thumbnail: null,
+              mediaUrl: null,
+              type: "IMAGE",
+              reach: 0, likes: 0, comments: 0, shares: 0, saves: 0,
+              engagementRate: "0.00",
+            };
           }
         }));
       }
