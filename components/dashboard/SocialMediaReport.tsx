@@ -170,6 +170,7 @@ function SummarySection({
   boostedMap,
   follows,
   isFB,
+  profileViews,
 }: {
   title: string;
   icon: React.ReactNode;
@@ -178,6 +179,7 @@ function SummarySection({
   boostedMap: Record<string, BoostedPost>;
   follows: { follows: number; unfollows: number };
   isFB: boolean;
+  profileViews: number;
 }) {
   const organicLikes    = posts.reduce((s, p) => s + p.likes, 0);
   const organicComments = posts.reduce((s, p) => s + p.comments, 0);
@@ -210,6 +212,7 @@ function SummarySection({
         </span>
       </div>
 
+      {/* Engagement metrics row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         <MetricCard
           label="Likes"
@@ -241,6 +244,7 @@ function SummarySection({
         />
       </div>
 
+      {/* Audience + Profile/Page Views row */}
       <div className={`rounded-xl border px-4 py-3 flex items-center gap-4 flex-wrap ${
         dark
           ? "border-white/[0.08] bg-[#1a1a2e]"
@@ -252,6 +256,7 @@ function SummarySection({
           Audience
         </span>
 
+        {/* Follows */}
         <div className="flex items-center gap-2">
           <div className={`flex items-center gap-1 text-[11px] font-medium ${
             dark ? "text-white/40" : "text-slate-500"
@@ -274,6 +279,7 @@ function SummarySection({
 
         <div className={`w-px h-5 ${dark ? "bg-white/[0.08]" : "bg-black/10"}`} />
 
+        {/* Unfollows */}
         <div className="flex items-center gap-2">
           <div className={`flex items-center gap-1 text-[11px] font-medium ${
             dark ? "text-white/40" : "text-slate-500"
@@ -295,6 +301,7 @@ function SummarySection({
 
         <div className={`w-px h-5 ${dark ? "bg-white/[0.08]" : "bg-black/10"}`} />
 
+        {/* Net */}
         <div className="flex items-center gap-2">
           <span className={`text-[11px] font-medium ${dark ? "text-white/40" : "text-slate-500"}`}>
             Net
@@ -303,6 +310,27 @@ function SummarySection({
             net >= 0 ? "text-emerald-500" : "text-red-500"
           }`}>
             {net >= 0 ? "+" : ""}{net.toLocaleString()}
+          </span>
+        </div>
+
+        <div className={`w-px h-5 ${dark ? "bg-white/[0.08]" : "bg-black/10"}`} />
+
+        {/* Profile Views (IG) / Page Views (FB) */}
+        <div className="flex items-center gap-2">
+          <div className={`flex items-center gap-1 text-[11px] font-medium ${
+            dark ? "text-white/40" : "text-slate-500"
+          }`}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2.5">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+            {isFB ? "Page Views" : "Profile Views"}
+          </div>
+          <span className={`text-[15px] font-bold tabular-nums ${
+            dark ? "text-white" : "text-slate-900"
+          }`}>
+            {profileViews > 0 ? profileViews.toLocaleString() : "—"}
           </span>
         </div>
       </div>
@@ -551,8 +579,10 @@ export default function SocialMediaReport({ client, from, to, platform, dark, on
   const [selectedPost, setSelectedPost]       = useState<Post | null>(null);
   const [selectedBoosted, setSelectedBoosted] = useState<BoostedPost | null>(null);
   const [cfgToken, setCfgToken]   = useState("");
-  const [fbFollows, setFbFollows] = useState({ follows: 0, unfollows: 0 });
-  const [igFollows, setIgFollows] = useState({ follows: 0, unfollows: 0 });
+  const [fbFollows, setFbFollows]           = useState({ follows: 0, unfollows: 0 });
+  const [igFollows, setIgFollows]           = useState({ follows: 0, unfollows: 0 });
+  const [fbPageViews, setFbPageViews]       = useState(0);
+  const [igProfileViews, setIgProfileViews] = useState(0);
 
   useEffect(() => { fetchReport(); }, []);
 
@@ -570,6 +600,7 @@ export default function SocialMediaReport({ client, from, to, platform, dark, on
       setCfgToken(cfg.token);
       if (!cfg.token) { setError("Invalid client config"); setLoading(false); return; }
 
+      // ── FB follows / unfollows ─────────────────────────────────────────────
       fetch(`${BASE}/${cfg.fbPageId}/insights?metric=page_daily_follows_unique,page_daily_unfollows_unique&period=day&since=${from}&until=${to}&access_token=${cfg.token}`)
         .then(r => r.json())
         .then(d => {
@@ -581,6 +612,17 @@ export default function SocialMediaReport({ client, from, to, platform, dark, on
           });
         }).catch(() => {});
 
+      // ── FB page views total ────────────────────────────────────────────────
+      // Returns values[] one entry per day — sum them across the date range.
+      fetch(`${BASE}/${cfg.fbPageId}/insights?metric=page_views_total&period=day&since=${from}&until=${to}&access_token=${cfg.token}`)
+        .then(r => r.json())
+        .then(d => {
+          const metric = d?.data?.find((m: any) => m.name === "page_views_total");
+          const total  = metric?.values?.reduce((s: number, v: any) => s + (v.value || 0), 0) || 0;
+          setFbPageViews(total);
+        }).catch(() => {});
+
+      // ── IG follows / unfollows ─────────────────────────────────────────────
       fetch(`${BASE}/${cfg.igUserId}/insights?metric=follows_and_unfollows&period=day&metric_type=total_value&breakdown=follow_type&since=${from}&until=${to}&access_token=${cfg.token}`)
         .then(r => r.json())
         .then(d => {
@@ -589,6 +631,15 @@ export default function SocialMediaReport({ client, from, to, platform, dark, on
             follows:   breakdown.find((b: any) => b.dimension_values?.[0] === "FOLLOWER")?.value    || 0,
             unfollows: breakdown.find((b: any) => b.dimension_values?.[0] === "NON_FOLLOWER")?.value || 0,
           });
+        }).catch(() => {});
+
+      // ── IG profile views ───────────────────────────────────────────────────
+      // Uses metric_type=total_value — the total sits at data[0].total_value.value (not values[]).
+      fetch(`${BASE}/${cfg.igUserId}/insights?metric=profile_views&metric_type=total_value&period=day&since=${from}&until=${to}&access_token=${cfg.token}`)
+        .then(r => r.json())
+        .then(d => {
+          const total = d?.data?.[0]?.total_value?.value || 0;
+          setIgProfileViews(total);
         }).catch(() => {});
 
     } catch {
@@ -857,6 +908,7 @@ export default function SocialMediaReport({ client, from, to, platform, dark, on
         <SummarySection
           title="Facebook"
           isFB={true}
+          profileViews={fbPageViews}
           icon={
             <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center">
               <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="white">
@@ -876,6 +928,7 @@ export default function SocialMediaReport({ client, from, to, platform, dark, on
         <SummarySection
           title="Instagram"
           isFB={false}
+          profileViews={igProfileViews}
           icon={
             <div className="w-5 h-5 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
               <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
