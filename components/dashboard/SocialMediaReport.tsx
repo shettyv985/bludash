@@ -49,14 +49,10 @@ const BASE = "https://graph.facebook.com/v25.0";
 type SortKey = "default" | "likes" | "comments" | "shares" | "saves" | "reach" | "engagement";
 
 // ─── Helper: safely extract a value from IG media insights ───────────────────
-// The IG media insights endpoint returns lifetime scalars at data[n].value
-// NOT inside a values[] array (that structure is only for time-series/account insights)
 function igVal(data: any[], name: string): number {
   const metric = data?.find((m: any) => m.name === name);
   if (!metric) return 0;
-  // Primary: lifetime scalar
   if (typeof metric.value === "number") return metric.value;
-  // Fallback: time-series array (shouldn't happen for media insights but just in case)
   if (Array.isArray(metric.values) && metric.values.length > 0) {
     return metric.values[0]?.value ?? 0;
   }
@@ -173,6 +169,7 @@ function SummarySection({
   dark,
   boostedMap,
   follows,
+  isFB,
 }: {
   title: string;
   icon: React.ReactNode;
@@ -180,16 +177,21 @@ function SummarySection({
   dark: boolean;
   boostedMap: Record<string, BoostedPost>;
   follows: { follows: number; unfollows: number };
+  isFB: boolean;
 }) {
   const organicLikes    = posts.reduce((s, p) => s + p.likes, 0);
   const organicComments = posts.reduce((s, p) => s + p.comments, 0);
   const organicShares   = posts.reduce((s, p) => s + p.shares, 0);
   const organicReach    = posts.reduce((s, p) => s + p.reach, 0);
 
-  const paidLikes    = posts.reduce((s, p) => s + (matchBoosted(p, boostedMap)?.paidLikes    || 0), 0);
-  const paidComments = posts.reduce((s, p) => s + (matchBoosted(p, boostedMap)?.paidComments || 0), 0);
-  const paidShares   = posts.reduce((s, p) => s + (matchBoosted(p, boostedMap)?.paidShares   || 0), 0);
-  const paidReach    = posts.reduce((s, p) => s + (matchBoosted(p, boostedMap)?.reach        || 0), 0);
+  // For FB: reactions/comments/shares from the Graph API already include boosted
+  // engagement on the same post object — do NOT add paid on top (double-count).
+  // For IG: paid metrics are additive and must be added.
+  // Reach is always additive for both platforms.
+  const paidLikes    = isFB ? 0 : posts.reduce((s, p) => s + (matchBoosted(p, boostedMap)?.paidLikes    || 0), 0);
+  const paidComments = isFB ? 0 : posts.reduce((s, p) => s + (matchBoosted(p, boostedMap)?.paidComments || 0), 0);
+  const paidShares   = isFB ? 0 : posts.reduce((s, p) => s + (matchBoosted(p, boostedMap)?.paidShares   || 0), 0);
+  const paidReach    = posts.reduce((s, p) => s + (matchBoosted(p, boostedMap)?.reach || 0), 0);
 
   const net = follows.follows - follows.unfollows;
 
@@ -310,13 +312,14 @@ function SummarySection({
 
 // ─── Post Table ───────────────────────────────────────────────────────────────
 function PostTable({
-  posts, showSaves, dark, boostedMap, onRowClick,
+  posts, showSaves, dark, boostedMap, onRowClick, isFB,
 }: {
   posts: Post[];
   showSaves: boolean;
   dark: boolean;
   boostedMap: Record<string, BoostedPost>;
   onRowClick: (post: Post, boosted: BoostedPost | null) => void;
+  isFB: boolean;
 }) {
   if (posts.length === 0)
     return (
@@ -360,11 +363,15 @@ function PostTable({
           </thead>
           <tbody>
             {posts.map((post, idx) => {
-              const boosted       = matchBoosted(post, boostedMap);
-              const totalLikes    = post.likes    + (boosted?.paidLikes    || 0);
-              const totalComments = post.comments + (boosted?.paidComments || 0);
-              const totalShares   = post.shares   + (boosted?.paidShares   || 0);
-              const totalReach    = post.reach    + (boosted?.reach        || 0);
+              const boosted = matchBoosted(post, boostedMap);
+
+              // FB: API reactions already include boosted — don't add paid on top.
+              // IG: paid metrics are additive.
+              // Reach is always additive.
+              const totalLikes    = post.likes    + (isFB ? 0 : (boosted?.paidLikes    || 0));
+              const totalComments = post.comments + (isFB ? 0 : (boosted?.paidComments || 0));
+              const totalShares   = post.shares   + (isFB ? 0 : (boosted?.paidShares   || 0));
+              const totalReach    = post.reach    + (boosted?.reach || 0);
               const isEven        = idx % 2 === 0;
 
               return (
@@ -597,84 +604,83 @@ export default function SocialMediaReport({ client, from, to, platform, dark, on
       setStep(0); setProgress(10);
       await new Promise(r => setTimeout(r, 400));
 
-      // ── Facebook posts ────────────────────────────────────────────────────
-      // ── Facebook posts ─────────────────────────────────────────────────
-if (platform === "FB" || platform === "BOTH") {
-  setStep(1); setProgress(20);
+      // ── Facebook posts ─────────────────────────────────────────────────────
+      if (platform === "FB" || platform === "BOTH") {
+        setStep(1); setProgress(20);
 
-  const fbRes = await fetch(
-    `${BASE}/${cfg.fbPageId}/posts` +
-    `?fields=id,message,created_time,permalink_url,full_picture` +
-    `,reactions.summary(total_count)` +        // ← total reactions (likes+love+wow etc)
-    `,comments.summary(total_count)` +          // ← comment count inline
-    `,shares` +                                  // ← shares.count inline
-    `,attachments{media_type,media{source}}` +
-    `&since=${from}&until=${to}&limit=100&access_token=${cfg.token}`
-  );
-  const fbData = await fbRes.json();
-  const rawFB  = fbData.data || [];
+        const fbRes = await fetch(
+          `${BASE}/${cfg.fbPageId}/posts` +
+          `?fields=id,message,created_time,permalink_url,full_picture` +
+          `,reactions.summary(total_count)` +
+          `,comments.summary(total_count)` +
+          `,shares` +
+          `,attachments{media_type,media{source}}` +
+          `&since=${from}&until=${to}&limit=100&access_token=${cfg.token}`
+        );
+        const fbData = await fbRes.json();
+        const rawFB  = fbData.data || [];
 
-  setStep(3); setProgress(45);
-  fbPosts = await Promise.all(rawFB.map(async (post: any) => {
-    const isReel    = post.permalink_url?.includes("/reel/") ||
-                      post.permalink_url?.includes("/videos/");
-    const mediaUrl  = post.attachments?.data?.[0]?.media?.source || null;
+        setStep(3); setProgress(45);
+        fbPosts = await Promise.all(rawFB.map(async (post: any) => {
+          const isReel   = post.permalink_url?.includes("/reel/") ||
+                           post.permalink_url?.includes("/videos/");
+          const mediaUrl = post.attachments?.data?.[0]?.media?.source || null;
 
-    // ✅ Read directly from the post object — no extra API call needed
-    const likes    = post.reactions?.summary?.total_count ?? 0;
-    const comments = post.comments?.summary?.total_count  ?? 0;
-    const shares   = post.shares?.count ?? 0;
+          // reactions.summary.total_count already includes boosted reactions —
+          // it reflects the true total on the post object regardless of paid/organic.
+          const likes    = post.reactions?.summary?.total_count ?? 0;
+          const comments = post.comments?.summary?.total_count  ?? 0;
+          const shares   = post.shares?.count ?? 0;
 
-    try {
-      // Only 1 extra call needed: reach (not available inline)
-      const insRes = await fetch(
-        `${BASE}/${post.id}/insights` +
-        `?metric=post_impressions_unique` +
-        `&access_token=${cfg.token}`
-      );
-      const ins   = await insRes.json();
-      const reach = ins?.data?.find(
-        (m: any) => m.name === "post_impressions_unique"
-      )?.values?.[0]?.value ?? 0;
+          try {
+            const insRes = await fetch(
+              `${BASE}/${post.id}/insights` +
+              `?metric=post_impressions_unique` +
+              `&access_token=${cfg.token}`
+            );
+            const ins   = await insRes.json();
+            const reach = ins?.data?.find(
+              (m: any) => m.name === "post_impressions_unique"
+            )?.values?.[0]?.value ?? 0;
 
-      const engagementRate = reach > 0
-        ? (((likes + comments + shares) / reach) * 100).toFixed(2)
-        : "0.00";
+            const engagementRate = reach > 0
+              ? (((likes + comments + shares) / reach) * 100).toFixed(2)
+              : "0.00";
 
-      return {
-        id: post.id,
-        message: post.message || "",
-        createdTime: post.created_time,
-        permalink: post.permalink_url,
-        thumbnail: post.full_picture || null,
-        mediaUrl,
-        type: isReel ? "REEL" : "IMAGE",
-        reach,
-        likes,    // ✅ From reactions.summary.total_count
-        comments, // ✅ From comments.summary.total_count
-        shares,   // ✅ From shares.count
-        saves: 0,
-        engagementRate,
-      };
-    } catch {
-      return {
-        id: post.id,
-        message: post.message || "",
-        createdTime: post.created_time,
-        permalink: post.permalink_url,
-        thumbnail: post.full_picture || null,
-        mediaUrl,
-        type: isReel ? "REEL" : "IMAGE",
-        reach: 0,
-        likes,
-        comments,
-        shares,
-        saves: 0,
-        engagementRate: "0.00",
-      };
-    }
-  }));
-}
+            return {
+              id: post.id,
+              message: post.message || "",
+              createdTime: post.created_time,
+              permalink: post.permalink_url,
+              thumbnail: post.full_picture || null,
+              mediaUrl,
+              type: isReel ? "REEL" : "IMAGE",
+              reach,
+              likes,
+              comments,
+              shares,
+              saves: 0,
+              engagementRate,
+            };
+          } catch {
+            return {
+              id: post.id,
+              message: post.message || "",
+              createdTime: post.created_time,
+              permalink: post.permalink_url,
+              thumbnail: post.full_picture || null,
+              mediaUrl,
+              type: isReel ? "REEL" : "IMAGE",
+              reach: 0,
+              likes,
+              comments,
+              shares,
+              saves: 0,
+              engagementRate: "0.00",
+            };
+          }
+        }));
+      }
 
       // ── Instagram posts ───────────────────────────────────────────────────
       if (platform === "IG" || platform === "BOTH") {
@@ -687,12 +693,9 @@ if (platform === "FB" || platform === "BOTH") {
         setStep(4); setProgress(80);
         igPosts = await Promise.all(rawIG.map(async (post: any) => {
           try {
-            // period=lifetime ensures we get the scalar .value structure, not time-series
             const insRes = await fetch(`${BASE}/${post.id}/insights?metric=reach,likes,comments,shares,saved&period=lifetime&access_token=${cfg.token}`);
             const ins    = await insRes.json();
 
-            // IG media insights return lifetime scalars at data[n].value
-            // NOT inside values[] — use igVal() helper which handles both cases
             const reach    = igVal(ins?.data, "reach");
             const likes    = igVal(ins?.data, "likes");
             const comments = igVal(ins?.data, "comments");
@@ -710,7 +713,6 @@ if (platform === "FB" || platform === "BOTH") {
               try {
                 const wRes  = await fetch(`${BASE}/${post.id}/insights?metric=ig_reels_avg_watch_time&period=lifetime&access_token=${cfg.token}`);
                 const wData = await wRes.json();
-                // avg watch time also returns as a scalar .value
                 const val = igVal(wData?.data, "ig_reels_avg_watch_time");
                 if (val) avgWatchTime = Math.round(val / 1000);
               } catch {}
@@ -757,10 +759,11 @@ if (platform === "FB" || platform === "BOTH") {
 
   const getTotal = (post: Post, key: "likes" | "comments" | "shares" | "reach") => {
     const b = matchBoosted(post, boostedMap);
-    if (key === "likes")    return post.likes    + (b?.paidLikes    || 0);
-    if (key === "comments") return post.comments + (b?.paidComments || 0);
-    if (key === "shares")   return post.shares   + (b?.paidShares   || 0);
-    if (key === "reach")    return post.reach    + (b?.reach        || 0);
+    const isFB = activeTab === "FB";
+    if (key === "likes")    return post.likes    + (isFB ? 0 : (b?.paidLikes    || 0));
+    if (key === "comments") return post.comments + (isFB ? 0 : (b?.paidComments || 0));
+    if (key === "shares")   return post.shares   + (isFB ? 0 : (b?.paidShares   || 0));
+    if (key === "reach")    return post.reach    + (b?.reach || 0);
     return 0;
   };
 
@@ -853,6 +856,7 @@ if (platform === "FB" || platform === "BOTH") {
       {(platform === "FB" || platform === "BOTH") && (
         <SummarySection
           title="Facebook"
+          isFB={true}
           icon={
             <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center">
               <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="white">
@@ -871,6 +875,7 @@ if (platform === "FB" || platform === "BOTH") {
       {(platform === "IG" || platform === "BOTH") && (
         <SummarySection
           title="Instagram"
+          isFB={false}
           icon={
             <div className="w-5 h-5 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
               <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
@@ -967,6 +972,7 @@ if (platform === "FB" || platform === "BOTH") {
         showSaves={showSaves}
         dark={dark}
         boostedMap={boostedMap}
+        isFB={activeTab === "FB"}
         onRowClick={(post, boosted) => { setSelectedPost(post); setSelectedBoosted(boosted); }}
       />
 
