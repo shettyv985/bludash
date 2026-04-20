@@ -598,59 +598,83 @@ export default function SocialMediaReport({ client, from, to, platform, dark, on
       await new Promise(r => setTimeout(r, 400));
 
       // ── Facebook posts ────────────────────────────────────────────────────
-      if (platform === "FB" || platform === "BOTH") {
-        setStep(1); setProgress(20);
+      // ── Facebook posts ─────────────────────────────────────────────────
+if (platform === "FB" || platform === "BOTH") {
+  setStep(1); setProgress(20);
 
-        // Fetch reactions, comments, shares, and attachments inline with the posts list — no extra per-post call needed
-        const fbRes  = await fetch(`${BASE}/${cfg.fbPageId}/posts?fields=id,message,created_time,permalink_url,full_picture,reactions.summary(total_count),comments.summary(total_count),shares,attachments{media_type,media{source}}&since=${from}&until=${to}&limit=100&access_token=${cfg.token}`);
-        const fbData = await fbRes.json();
-        const rawFB  = fbData.data || [];
+  const fbRes = await fetch(
+    `${BASE}/${cfg.fbPageId}/posts` +
+    `?fields=id,message,created_time,permalink_url,full_picture` +
+    `,reactions.summary(total_count)` +        // ← total reactions (likes+love+wow etc)
+    `,comments.summary(total_count)` +          // ← comment count inline
+    `,shares` +                                  // ← shares.count inline
+    `,attachments{media_type,media{source}}` +
+    `&since=${from}&until=${to}&limit=100&access_token=${cfg.token}`
+  );
+  const fbData = await fbRes.json();
+  const rawFB  = fbData.data || [];
 
-        setStep(3); setProgress(45);
-        fbPosts = await Promise.all(rawFB.map(async (post: any) => {
-          const isReel = post.permalink_url?.includes("/reel/") || post.permalink_url?.includes("/videos/");
-          const attachmentMedia = post.attachments?.data?.[0]?.media;
-          const mediaUrl: string | null = attachmentMedia?.source || null;
+  setStep(3); setProgress(45);
+  fbPosts = await Promise.all(rawFB.map(async (post: any) => {
+    const isReel    = post.permalink_url?.includes("/reel/") ||
+                      post.permalink_url?.includes("/videos/");
+    const mediaUrl  = post.attachments?.data?.[0]?.media?.source || null;
 
-          // reactions, comments, shares are already in the post object — read directly
-          const likes    = post.reactions?.summary?.total_count ?? 0;
-          const comments = post.comments?.summary?.total_count  ?? 0;
-          const shares   = post.shares?.count ?? 0;
+    // ✅ Read directly from the post object — no extra API call needed
+    const likes    = post.reactions?.summary?.total_count ?? 0;
+    const comments = post.comments?.summary?.total_count  ?? 0;
+    const shares   = post.shares?.count ?? 0;
 
-          try {
-            // Only one extra call needed now: reach (insights endpoint)
-            const insRes = await fetch(`${BASE}/${post.id}/insights?metric=post_impressions_unique&access_token=${cfg.token}`);
-            const ins    = await insRes.json();
-            const reach  = ins?.data?.find((m: any) => m.name === "post_impressions_unique")?.values?.[0]?.value || 0;
-            const engagementRate = reach > 0 ? (((likes + comments + shares) / reach) * 100).toFixed(2) : "0.00";
+    try {
+      // Only 1 extra call needed: reach (not available inline)
+      const insRes = await fetch(
+        `${BASE}/${post.id}/insights` +
+        `?metric=post_impressions_unique` +
+        `&access_token=${cfg.token}`
+      );
+      const ins   = await insRes.json();
+      const reach = ins?.data?.find(
+        (m: any) => m.name === "post_impressions_unique"
+      )?.values?.[0]?.value ?? 0;
 
-            return {
-              id: post.id,
-              message: post.message || "",
-              createdTime: post.created_time,
-              permalink: post.permalink_url,
-              thumbnail: post.full_picture || null,
-              mediaUrl,
-              type: isReel ? "REEL" : "IMAGE",
-              reach, likes, comments, shares,
-              saves: 0,
-              engagementRate,
-            };
-          } catch {
-            return {
-              id: post.id,
-              message: post.message || "",
-              createdTime: post.created_time,
-              permalink: post.permalink_url,
-              thumbnail: null,
-              mediaUrl,
-              type: isReel ? "REEL" : "IMAGE",
-              reach: 0, likes, comments, shares, saves: 0,
-              engagementRate: "0.00",
-            };
-          }
-        }));
-      }
+      const engagementRate = reach > 0
+        ? (((likes + comments + shares) / reach) * 100).toFixed(2)
+        : "0.00";
+
+      return {
+        id: post.id,
+        message: post.message || "",
+        createdTime: post.created_time,
+        permalink: post.permalink_url,
+        thumbnail: post.full_picture || null,
+        mediaUrl,
+        type: isReel ? "REEL" : "IMAGE",
+        reach,
+        likes,    // ✅ From reactions.summary.total_count
+        comments, // ✅ From comments.summary.total_count
+        shares,   // ✅ From shares.count
+        saves: 0,
+        engagementRate,
+      };
+    } catch {
+      return {
+        id: post.id,
+        message: post.message || "",
+        createdTime: post.created_time,
+        permalink: post.permalink_url,
+        thumbnail: post.full_picture || null,
+        mediaUrl,
+        type: isReel ? "REEL" : "IMAGE",
+        reach: 0,
+        likes,
+        comments,
+        shares,
+        saves: 0,
+        engagementRate: "0.00",
+      };
+    }
+  }));
+}
 
       // ── Instagram posts ───────────────────────────────────────────────────
       if (platform === "IG" || platform === "BOTH") {
