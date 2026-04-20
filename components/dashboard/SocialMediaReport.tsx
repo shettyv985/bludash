@@ -601,7 +601,8 @@ export default function SocialMediaReport({ client, from, to, platform, dark, on
       if (platform === "FB" || platform === "BOTH") {
         setStep(1); setProgress(20);
 
-        const fbRes  = await fetch(`${BASE}/${cfg.fbPageId}/posts?fields=id,message,created_time,permalink_url,full_picture,attachments{media_type,media{source}}&since=${from}&until=${to}&limit=100&access_token=${cfg.token}`);
+        // Fetch reactions, comments, shares, and attachments inline with the posts list — no extra per-post call needed
+        const fbRes  = await fetch(`${BASE}/${cfg.fbPageId}/posts?fields=id,message,created_time,permalink_url,full_picture,reactions.summary(total_count),comments.summary(total_count),shares,attachments{media_type,media{source}}&since=${from}&until=${to}&limit=100&access_token=${cfg.token}`);
         const fbData = await fbRes.json();
         const rawFB  = fbData.data || [];
 
@@ -610,18 +611,17 @@ export default function SocialMediaReport({ client, from, to, platform, dark, on
           const isReel = post.permalink_url?.includes("/reel/") || post.permalink_url?.includes("/videos/");
           const attachmentMedia = post.attachments?.data?.[0]?.media;
           const mediaUrl: string | null = attachmentMedia?.source || null;
+
+          // reactions, comments, shares are already in the post object — read directly
+          const likes    = post.reactions?.summary?.total_count ?? 0;
+          const comments = post.comments?.summary?.total_count  ?? 0;
+          const shares   = post.shares?.count ?? 0;
+
           try {
-            // Single consolidated call: reactions (all emoji = public likes), comments, shares + reach
-            const [engRes, insRes] = await Promise.all([
-              fetch(`${BASE}/${post.id}?fields=reactions.summary(total_count),likes.summary(total_count),comments.summary(total_count),shares&access_token=${cfg.token}`),
-              fetch(`${BASE}/${post.id}/insights?metric=post_impressions_unique&access_token=${cfg.token}`),
-            ]);
-            const [eng, ins] = await Promise.all([engRes.json(), insRes.json()]);
-            const reach    = ins?.data?.find((m: any) => m.name === "post_impressions_unique")?.values?.[0]?.value || 0;
-            // reactions = all emoji responses — matches what Facebook publicly displays
-            const likes    = eng?.reactions?.summary?.total_count ?? eng?.likes?.summary?.total_count ?? 0;
-            const comments = eng?.comments?.summary?.total_count  ?? 0;
-            const shares   = eng?.shares?.count ?? 0;
+            // Only one extra call needed now: reach (insights endpoint)
+            const insRes = await fetch(`${BASE}/${post.id}/insights?metric=post_impressions_unique&access_token=${cfg.token}`);
+            const ins    = await insRes.json();
+            const reach  = ins?.data?.find((m: any) => m.name === "post_impressions_unique")?.values?.[0]?.value || 0;
             const engagementRate = reach > 0 ? (((likes + comments + shares) / reach) * 100).toFixed(2) : "0.00";
 
             return {
@@ -645,7 +645,7 @@ export default function SocialMediaReport({ client, from, to, platform, dark, on
               thumbnail: null,
               mediaUrl,
               type: isReel ? "REEL" : "IMAGE",
-              reach: 0, likes: 0, comments: 0, shares: 0, saves: 0,
+              reach: 0, likes, comments, shares, saves: 0,
               engagementRate: "0.00",
             };
           }
