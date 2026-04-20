@@ -10,7 +10,7 @@ interface Post {
   createdTime: string;
   permalink: string;
   thumbnail: string | null;
-  mediaUrl: string | null;       // ← direct video URL for inline playback
+  mediaUrl: string | null;
   type: string;
   reach: number;
   likes: number;
@@ -47,6 +47,21 @@ const STEPS = [
 const BASE = "https://graph.facebook.com/v25.0";
 
 type SortKey = "default" | "likes" | "comments" | "shares" | "saves" | "reach" | "engagement";
+
+// ─── Helper: safely extract a value from IG media insights ───────────────────
+// The IG media insights endpoint returns lifetime scalars at data[n].value
+// NOT inside a values[] array (that structure is only for time-series/account insights)
+function igVal(data: any[], name: string): number {
+  const metric = data?.find((m: any) => m.name === name);
+  if (!metric) return 0;
+  // Primary: lifetime scalar
+  if (typeof metric.value === "number") return metric.value;
+  // Fallback: time-series array (shouldn't happen for media insights but just in case)
+  if (Array.isArray(metric.values) && metric.values.length > 0) {
+    return metric.values[0]?.value ?? 0;
+  }
+  return 0;
+}
 
 // ─── Helper: match a post to its boosted entry ────────────────────────────────
 function matchBoosted(post: Post, boostedMap: Record<string, BoostedPost>): BoostedPost | null {
@@ -586,7 +601,6 @@ export default function SocialMediaReport({ client, from, to, platform, dark, on
       if (platform === "FB" || platform === "BOTH") {
         setStep(1); setProgress(20);
 
-        // Request `source` so we get the direct video URL for reels/videos
         const fbRes  = await fetch(`${BASE}/${cfg.fbPageId}/posts?fields=id,message,created_time,permalink_url,full_picture,attachments{media_type,media{source}}&since=${from}&until=${to}&limit=100&access_token=${cfg.token}`);
         const fbData = await fbRes.json();
         const rawFB  = fbData.data || [];
@@ -601,14 +615,13 @@ export default function SocialMediaReport({ client, from, to, platform, dark, on
               fetch(`${BASE}/${post.id}?fields=shares&access_token=${cfg.token}`),
             ]);
             const [ins, react, comm, share] = await Promise.all([insRes.json(), reactRes.json(), commRes.json(), shareRes.json()]);
+            // FB post insights use values[0].value (time-series structure)
             const reach    = ins?.data?.find((m: any) => m.name === "post_impressions_unique")?.values?.[0]?.value || 0;
             const likes    = react?.reactions?.summary?.total_count || 0;
             const comments = comm?.comments?.summary?.total_count   || 0;
             const shares   = share?.shares?.count || 0;
             const engagementRate = reach > 0 ? (((likes + comments + shares) / reach) * 100).toFixed(2) : "0.00";
             const isReel   = post.permalink_url?.includes("/reel/") || post.permalink_url?.includes("/videos/");
-
-            // Extract direct video source from attachments
             const attachmentMedia = post.attachments?.data?.[0]?.media;
             const mediaUrl: string | null = attachmentMedia?.source || null;
 
@@ -645,7 +658,6 @@ export default function SocialMediaReport({ client, from, to, platform, dark, on
       if (platform === "IG" || platform === "BOTH") {
         setStep(2); setProgress(65);
 
-        // Request media_url — this is the direct video URL for reels
         const igRes  = await fetch(`${BASE}/${cfg.igUserId}/media?fields=id,caption,media_type,timestamp,permalink,media_url,thumbnail_url&since=${from}&until=${to}&limit=100&access_token=${cfg.token}`);
         const igData = await igRes.json();
         const rawIG  = igData.data || [];
@@ -653,27 +665,31 @@ export default function SocialMediaReport({ client, from, to, platform, dark, on
         setStep(4); setProgress(80);
         igPosts = await Promise.all(rawIG.map(async (post: any) => {
           try {
-            const insRes = await fetch(`${BASE}/${post.id}/insights?metric=reach,likes,comments,shares,saved&access_token=${cfg.token}`);
+            // period=lifetime ensures we get the scalar .value structure, not time-series
+            const insRes = await fetch(`${BASE}/${post.id}/insights?metric=reach,likes,comments,shares,saved&period=lifetime&access_token=${cfg.token}`);
             const ins    = await insRes.json();
-            const getValue = (name: string) => ins?.data?.find((m: any) => m.name === name)?.values?.[0]?.value || 0;
-            const reach    = getValue("reach");
-            const likes    = getValue("likes");
-            const comments = getValue("comments");
-            const shares   = getValue("shares");
-            const saves    = getValue("saved");
+
+            // IG media insights return lifetime scalars at data[n].value
+            // NOT inside values[] — use igVal() helper which handles both cases
+            const reach    = igVal(ins?.data, "reach");
+            const likes    = igVal(ins?.data, "likes");
+            const comments = igVal(ins?.data, "comments");
+            const shares   = igVal(ins?.data, "shares");
+            const saves    = igVal(ins?.data, "saved");
+
             const engagementRate = reach > 0 ? (((likes + comments + shares + saves) / reach) * 100).toFixed(2) : "0.00";
             const mediaType = post.media_type === "VIDEO" ? "REEL" : post.media_type === "CAROUSEL_ALBUM" ? "CAROUSEL" : "IMAGE";
 
-            // media_url is the direct video URL for reels/videos; thumbnail_url is the cover image
-            const mediaUrl: string | null   = (mediaType === "REEL" || mediaType === "IMAGE") ? (post.media_url || null) : null;
-            const thumbnail: string | null  = post.thumbnail_url || (mediaType !== "REEL" ? post.media_url : null) || null;
+            const mediaUrl: string | null  = (mediaType === "REEL" || mediaType === "IMAGE") ? (post.media_url || null) : null;
+            const thumbnail: string | null = post.thumbnail_url || (mediaType !== "REEL" ? post.media_url : null) || null;
 
             let avgWatchTime = null;
             if (mediaType === "REEL") {
               try {
                 const wRes  = await fetch(`${BASE}/${post.id}/insights?metric=ig_reels_avg_watch_time&period=lifetime&access_token=${cfg.token}`);
                 const wData = await wRes.json();
-                const val   = wData?.data?.[0]?.values?.[0]?.value;
+                // avg watch time also returns as a scalar .value
+                const val = igVal(wData?.data, "ig_reels_avg_watch_time");
                 if (val) avgWatchTime = Math.round(val / 1000);
               } catch {}
             }
