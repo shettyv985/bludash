@@ -607,23 +607,22 @@ export default function SocialMediaReport({ client, from, to, platform, dark, on
 
         setStep(3); setProgress(45);
         fbPosts = await Promise.all(rawFB.map(async (post: any) => {
+          const isReel = post.permalink_url?.includes("/reel/") || post.permalink_url?.includes("/videos/");
+          const attachmentMedia = post.attachments?.data?.[0]?.media;
+          const mediaUrl: string | null = attachmentMedia?.source || null;
           try {
-            const [insRes, reactRes, commRes, shareRes] = await Promise.all([
+            // Single consolidated call: reactions (all emoji = public likes), comments, shares + reach
+            const [engRes, insRes] = await Promise.all([
+              fetch(`${BASE}/${post.id}?fields=reactions.summary(total_count),likes.summary(total_count),comments.summary(total_count),shares&access_token=${cfg.token}`),
               fetch(`${BASE}/${post.id}/insights?metric=post_impressions_unique&access_token=${cfg.token}`),
-              fetch(`${BASE}/${post.id}?fields=reactions.summary(total_count)&access_token=${cfg.token}`),
-              fetch(`${BASE}/${post.id}?fields=comments.summary(total_count)&access_token=${cfg.token}`),
-              fetch(`${BASE}/${post.id}?fields=shares&access_token=${cfg.token}`),
             ]);
-            const [ins, react, comm, share] = await Promise.all([insRes.json(), reactRes.json(), commRes.json(), shareRes.json()]);
-            // FB post insights use values[0].value (time-series structure)
+            const [eng, ins] = await Promise.all([engRes.json(), insRes.json()]);
             const reach    = ins?.data?.find((m: any) => m.name === "post_impressions_unique")?.values?.[0]?.value || 0;
-            const likes    = react?.reactions?.summary?.total_count || 0;
-            const comments = comm?.comments?.summary?.total_count   || 0;
-            const shares   = share?.shares?.count || 0;
+            // reactions = all emoji responses — matches what Facebook publicly displays
+            const likes    = eng?.reactions?.summary?.total_count ?? eng?.likes?.summary?.total_count ?? 0;
+            const comments = eng?.comments?.summary?.total_count  ?? 0;
+            const shares   = eng?.shares?.count ?? 0;
             const engagementRate = reach > 0 ? (((likes + comments + shares) / reach) * 100).toFixed(2) : "0.00";
-            const isReel   = post.permalink_url?.includes("/reel/") || post.permalink_url?.includes("/videos/");
-            const attachmentMedia = post.attachments?.data?.[0]?.media;
-            const mediaUrl: string | null = attachmentMedia?.source || null;
 
             return {
               id: post.id,
@@ -638,14 +637,13 @@ export default function SocialMediaReport({ client, from, to, platform, dark, on
               engagementRate,
             };
           } catch {
-            const isReel = post.permalink_url?.includes("/reel/") || post.permalink_url?.includes("/videos/");
             return {
               id: post.id,
               message: post.message || "",
               createdTime: post.created_time,
               permalink: post.permalink_url,
               thumbnail: null,
-              mediaUrl: null,
+              mediaUrl,
               type: isReel ? "REEL" : "IMAGE",
               reach: 0, likes: 0, comments: 0, shares: 0, saves: 0,
               engagementRate: "0.00",
