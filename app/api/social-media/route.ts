@@ -1,3 +1,4 @@
+// C:\Users\Varun Shetty\Desktop\New folder\bludash\app\api\social-media\route.ts
 import { NextRequest, NextResponse } from "next/server";
 
 const CLIENT_CONFIG: Record<string, { token: string; fbPageId: string; igUserId: string; adAccountId: string }> = {

@@ -1,3 +1,4 @@
+// C:\Users\Varun Shetty\Desktop\New folder\bludash\components\dashboard\PlatformToggle.tsx
 "use client";
 
 type Platform = "FB" | "IG" | "BOTH";

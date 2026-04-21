@@ -1,3 +1,4 @@
+// C:\Users\Varun Shetty\Desktop\New folder\bludash\components\dashboard\useBoostedPosts.ts
 import { useState, useEffect } from "react";
 
 export interface BoostedPost {

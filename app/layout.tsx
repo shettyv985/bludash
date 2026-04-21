@@ -1,3 +1,4 @@
+// C:\Users\Varun Shetty\Desktop\New folder\bludash\app\layout.tsx
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
 import { DM_Serif_Display, DM_Sans } from "next/font/google";

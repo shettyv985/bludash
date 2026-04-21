@@ -1,3 +1,4 @@
+// C:\Users\Varun Shetty\Desktop\New folder\bludash\lib\auth.ts
 export const CLIENTS = {
   geojit123: {
     password: "geojit@123",
