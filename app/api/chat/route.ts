@@ -12,50 +12,39 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid messages" }, { status: 400 });
     }
 
-    // Build the system prompt with all the report data as knowledge base
-    const systemPrompt = `You are an expert social media analyst and creative strategist working for Bludash, a social media marketing agency. You have been given the complete analytics data for the client "${client}" for the period ${from} to ${to}.
+    const systemPrompt = `You are a sharp social media analyst at Bludash. You have the full analytics data for "${client}" (${from} to ${to}).
 
-Here is the complete data as your knowledge base:
-
+DATA:
 ${JSON.stringify(reportData, null, 2)}
 
-DATA STRUCTURE EXPLANATION:
-- fbPosts: Array of Facebook posts with fields: id, message (caption), createdTime, type (IMAGE/REEL/CAROUSEL), reach, likes, comments, shares, engagementRate (%), boosted (if present: amountSpent in INR, paidReach, paidLikes, paidComments, paidShares, impressions, clicks, cpm, ctr, adName, status)
-- igPosts: Array of Instagram posts with same fields plus: saves, avgWatchTime (for REELs in seconds)
-- summary.facebook: Aggregated FB totals (organicLikes, organicComments, organicShares, organicReach, paidReach, totalPosts, follows, unfollows, netFollowers, pageViews)
-- summary.instagram: Aggregated IG totals (organicLikes, organicComments, organicShares, organicSaves, organicReach, paidLikes, paidComments, paidShares, paidReach, totalPosts, follows, unfollows, netFollowers, profileViews)
+DATA KEYS:
+- fbPosts / igPosts: id, message (caption), createdTime, type (IMAGE/REEL/CAROUSEL), reach, likes, comments, shares, saves (IG only), engagementRate (%), avgWatchTime (REEL, seconds), boosted → { amountSpent ₹, paidReach, paidLikes, paidComments, paidShares, impressions, clicks, cpm, ctr, adName, status }
+- summary.facebook: organicLikes/Comments/Shares/Reach, paidReach, totalPosts, follows, unfollows, netFollowers, pageViews
+- summary.instagram: same + organicSaves, paidLikes/Comments/Shares, profileViews
 
-YOUR CAPABILITIES:
-- Identify best and worst performing creatives with specific reasoning based on engagement rate, reach, likes, comments, shares, saves
-- Compare organic vs paid performance
-- Spot trends across the reporting period
-- Analyze boosted post ROI (cost per engagement, CPM, CTR)
-- Give actionable recommendations
-- Answer any question about the data
+RESPONSE RULES — follow strictly:
+1. **Be concise.** No preamble, no summaries of what you're about to say, no sign-offs.
+2. **Lead with the answer.** State the finding first, then the reasoning in one line.
+3. **Use bullet points** for any list of more than 2 items.
+4. **Always cite exact numbers** — mention the caption snippet (first 6–8 words), date, and key metric.
+5. **Do deep analysis.** Cross-reference reach vs engagement rate, organic vs paid splits, watch time, CTR, CPM before concluding.
+6. **Use ₹ for all money values.**
+7. **Max ~150 words per response** unless the question genuinely requires a full breakdown (e.g. "summarise the whole period"). Even then, stay tight.
+8. If something isn't in the data, say "Data not available" — don't speculate.`;
 
-RESPONSE STYLE:
-- Be specific — always mention the actual caption snippet, date, and numbers
-- When identifying best/worst, explain the exact reason (e.g. "low engagement rate of 0.8% despite high reach of 12,000 suggests the creative didn't resonate")
-- Use ₹ for currency amounts
-- Keep responses concise but insightful
-- If asked about something not in the data, say so honestly
-- Format with clear sections when comparing multiple posts`;
-
-    // Convert messages to Gemini format
     const contents = messages.map((msg: { role: string; content: string }) => ({
       role: msg.role === "assistant" ? "model" : "user",
       parts: [{ text: msg.content }],
     }));
 
-    // Add system context as first user message if it's the first real message
     const fullContents = [
       {
         role: "user",
-        parts: [{ text: systemPrompt + "\n\nI am ready to answer questions about this data." }],
+        parts: [{ text: systemPrompt + "\n\nReady?" }],
       },
       {
         role: "model",
-        parts: [{ text: `Got it! I've loaded the complete analytics data for **${client}** (${from} to ${to}). I can see all the Facebook and Instagram posts, their engagement metrics, boosted post details, audience data, and more. What would you like to know?` }],
+        parts: [{ text: `Loaded. ${reportData?.fbPosts?.length ?? 0} FB + ${reportData?.igPosts?.length ?? 0} IG posts for **${client}** (${from} → ${to}). Ask away.` }],
       },
       ...contents,
     ];
@@ -70,7 +59,6 @@ RESPONSE STYLE:
       contents: fullContents,
     });
 
-    // Stream the response
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {

@@ -179,7 +179,6 @@ export default function AIChatBot({ client, from, to, dark, isAdmin }: Props) {
   const [fetchError, setFetchError] = useState("");
   const [streaming, setStreaming] = useState(false);
 
-  // Panel size & free position (null = CSS-anchored bottom-right)
   const [panelW, setPanelW] = useState(DEFAULT_W);
   const [panelH, setPanelH] = useState(DEFAULT_H);
   const [freePos, setFreePos] = useState<{ x: number; y: number } | null>(null);
@@ -190,11 +189,9 @@ export default function AIChatBot({ client, from, to, dark, isAdmin }: Props) {
   const abortRef = useRef<AbortController | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
-  // Pointer state refs (avoids stale closure issues)
   const dragRef = useRef({ active: false, startPx: 0, startPy: 0, startEx: 0, startEy: 0 });
   const resizeRef = useRef({ active: false, edge: "", startPx: 0, startPy: 0, startW: 0, startH: 0, startEx: 0, startEy: 0 });
 
-  // ── Mobile detection ───────────────────────────────────────────────────────
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 640);
     check();
@@ -202,13 +199,11 @@ export default function AIChatBot({ client, from, to, dark, isAdmin }: Props) {
     return () => window.removeEventListener("resize", check);
   }, []);
 
-  // ── Clamp helper ──────────────────────────────────────────────────────────
   const clamp = useCallback((x: number, y: number, w: number, h: number) => ({
     x: Math.max(0, Math.min(x, window.innerWidth - w)),
     y: Math.max(0, Math.min(y, window.innerHeight - h)),
   }), []);
 
-  // Clamp on viewport resize
   useEffect(() => {
     const onResize = () => {
       if (freePos) setFreePos((p) => p ? clamp(p.x, p.y, panelW, panelH) : p);
@@ -217,7 +212,6 @@ export default function AIChatBot({ client, from, to, dark, isAdmin }: Props) {
     return () => window.removeEventListener("resize", onResize);
   }, [freePos, panelW, panelH, clamp]);
 
-  // ── Global pointer move / up ───────────────────────────────────────────────
   useEffect(() => {
     const onMove = (e: MouseEvent | TouchEvent) => {
       const cx = "touches" in e ? e.touches[0].clientX : (e as MouseEvent).clientX;
@@ -267,7 +261,6 @@ export default function AIChatBot({ client, from, to, dark, isAdmin }: Props) {
     };
   }, [panelW, panelH, clamp]);
 
-  // ── Drag start ────────────────────────────────────────────────────────────
   const onDragStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
     if (isMobile) return;
     const panel = panelRef.current;
@@ -275,7 +268,6 @@ export default function AIChatBot({ client, from, to, dark, isAdmin }: Props) {
     const rect = panel.getBoundingClientRect();
     const cx = "touches" in e ? e.touches[0].clientX : e.clientX;
     const cy = "touches" in e ? e.touches[0].clientY : e.clientY;
-    // If no free position yet, initialise from current CSS-anchored position
     const ex = freePos ? freePos.x : rect.left;
     const ey = freePos ? freePos.y : rect.top;
     if (!freePos) setFreePos({ x: ex, y: ey });
@@ -283,7 +275,6 @@ export default function AIChatBot({ client, from, to, dark, isAdmin }: Props) {
     e.preventDefault();
   }, [isMobile, freePos]);
 
-  // ── Resize start ──────────────────────────────────────────────────────────
   const onResizeStart = useCallback((e: React.MouseEvent | React.TouchEvent, edge: string) => {
     if (isMobile) return;
     const panel = panelRef.current;
@@ -299,12 +290,10 @@ export default function AIChatBot({ client, from, to, dark, isAdmin }: Props) {
     e.stopPropagation();
   }, [isMobile, freePos]);
 
-  // ── Scroll to bottom ──────────────────────────────────────────────────────
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streaming]);
 
-  // ── Data fetch triggers ───────────────────────────────────────────────────
   useEffect(() => {
     if (open && (!reportData || reportData.client !== client || reportData.from !== from || reportData.to !== to)) {
       fetchData();
@@ -317,7 +306,6 @@ export default function AIChatBot({ client, from, to, dark, isAdmin }: Props) {
     setFetchError("");
   }, [client, from, to]);
 
-  // ── Fetch all data ────────────────────────────────────────────────────────
   const fetchData = async () => {
     if (!client || !from || !to) { setFetchError("Please select a client and date range first."); return; }
     setFetching(true); setFetchError("");
@@ -326,7 +314,6 @@ export default function AIChatBot({ client, from, to, dark, isAdmin }: Props) {
       if (!cfg.token) throw new Error("Invalid client config");
       const adsCfg = await (await fetch(`/api/ads?client=${client}`)).json();
 
-      // Boosted map
       let boostedMap: Record<string, any> = {};
       try {
         const adsData = await (await fetch(`${BASE}/${adsCfg.adAccountId}/ads?fields=id,name,status,creative{body,object_story_spec}&limit=200&access_token=${cfg.token}`)).json();
@@ -349,7 +336,6 @@ export default function AIChatBot({ client, from, to, dark, isAdmin }: Props) {
         return boostedMap[k] || Object.values(boostedMap).find((b: any) => b.body.trim().substring(0, 100).toLowerCase() === k || msg.trim().startsWith(b.body.trim().substring(0, 80)) || b.body.trim().startsWith(msg.trim().substring(0, 80))) || null;
       };
 
-      // FB posts
       const fbRaw = (await (await fetch(`${BASE}/${cfg.fbPageId}/posts?fields=id,message,created_time,permalink_url,reactions.summary(total_count),comments.summary(total_count),shares&since=${from}&until=${to}&limit=100&access_token=${cfg.token}`)).json()).data || [];
       const fbPosts: Post[] = await Promise.all(fbRaw.map(async (p: any) => {
         const isReel = p.permalink_url?.includes("/reel/") || p.permalink_url?.includes("/videos/");
@@ -360,7 +346,6 @@ export default function AIChatBot({ client, from, to, dark, isAdmin }: Props) {
         return { id: p.id, message: p.message || "", createdTime: p.created_time, type: isReel ? "REEL" : "IMAGE", reach, likes, comments, shares, saves: 0, engagementRate: reach > 0 ? (((likes + comments + shares) / reach) * 100).toFixed(2) : "0.00", boosted: b ? { adName: b.adName, amountSpent: b.amountSpent, paidReach: b.paidReach, paidLikes: b.paidLikes, paidComments: b.paidComments, paidShares: b.paidShares, impressions: b.impressions, clicks: b.clicks, cpm: b.cpm, ctr: b.ctr, status: b.status } : null };
       }));
 
-      // IG posts
       const igRaw = (await (await fetch(`${BASE}/${cfg.igUserId}/media?fields=id,caption,media_type,timestamp,permalink&since=${from}&until=${to}&limit=100&access_token=${cfg.token}`)).json()).data || [];
       const igPosts: Post[] = await Promise.all(igRaw.map(async (p: any) => {
         let reach = 0, likes = 0, comments = 0, shares = 0, saves = 0, avgWatchTime = null;
@@ -371,7 +356,6 @@ export default function AIChatBot({ client, from, to, dark, isAdmin }: Props) {
         return { id: p.id, message: p.caption || "", createdTime: p.timestamp, type: mt, reach, likes, comments, shares, saves, engagementRate: reach > 0 ? (((likes + comments + shares + saves) / reach) * 100).toFixed(2) : "0.00", avgWatchTime, boosted: b ? { adName: b.adName, amountSpent: b.amountSpent, paidReach: b.paidReach, paidLikes: b.paidLikes, paidComments: b.paidComments, paidShares: b.paidShares, impressions: b.impressions, clicks: b.clicks, cpm: b.cpm, ctr: b.ctr, status: b.status } : null };
       }));
 
-      // Audience
       let fbF = { follows: 0, unfollows: 0 }, igF = { follows: 0, unfollows: 0 }, fbPV = 0, igPV = 0;
       try { const d = (await (await fetch(`${BASE}/${cfg.fbPageId}/insights?metric=page_daily_follows_unique,page_daily_unfollows_unique&period=day&since=${from}&until=${to}&access_token=${cfg.token}`)).json())?.data; fbF = { follows: d?.find((m: any) => m.name === "page_daily_follows_unique")?.values?.reduce((s: number, v: any) => s + (v.value || 0), 0) || 0, unfollows: d?.find((m: any) => m.name === "page_daily_unfollows_unique")?.values?.reduce((s: number, v: any) => s + (v.value || 0), 0) || 0 }; } catch {}
       try { fbPV = (await (await fetch(`${BASE}/${cfg.fbPageId}/insights?metric=page_views_total&period=day&since=${from}&until=${to}&access_token=${cfg.token}`)).json())?.data?.find((m: any) => m.name === "page_views_total")?.values?.reduce((s: number, v: any) => s + (v.value || 0), 0) || 0; } catch {}
@@ -392,7 +376,6 @@ export default function AIChatBot({ client, from, to, dark, isAdmin }: Props) {
     }
   };
 
-  // ── Send message ──────────────────────────────────────────────────────────
   const sendMessage = async (text?: string) => {
     const userText = (text || input).trim();
     if (!userText || loading || streaming || !reportData) return;
@@ -441,14 +424,13 @@ export default function AIChatBot({ client, from, to, dark, isAdmin }: Props) {
   const isReady = !fetching && !!reportData && !fetchError;
   const noConfig = !client || !from || !to;
 
-  // ── Panel style ───────────────────────────────────────────────────────────
   const panelStyle: React.CSSProperties = isMobile
     ? { position: "fixed", left: 0, right: 0, bottom: 0, width: "100%", height: "82svh", zIndex: 50 }
     : freePos
     ? { position: "fixed", left: freePos.x, top: freePos.y, width: panelW, height: panelH, zIndex: 50 }
     : { position: "fixed", right: 24, bottom: 76, width: panelW, height: panelH, zIndex: 50 };
 
-  const rh = `absolute z-10 select-none touch-none`; // resize handle base
+  const rh = `absolute z-10 select-none touch-none`;
 
   return (
     <>
@@ -465,18 +447,26 @@ export default function AIChatBot({ client, from, to, dark, isAdmin }: Props) {
         .aic-drag:active { cursor: grabbing; }
       `}</style>
 
-      {/* ── Toggle button ─────────────────────────────────────────────────── */}
+      {/* ── Toggle button — always shows chat icon, never shows X on mobile ── */}
       <button
         onClick={handleToggle}
         style={{ width: 52, height: 52, position: "fixed", bottom: 24, right: 24, zIndex: 51 }}
-        className={`rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 hover:scale-110 active:scale-95 ${open ? dark ? "bg-white/10 border border-white/20" : "bg-slate-200 border border-slate-300" : "bg-blue-600 hover:bg-blue-700"}`}
+        className={`rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 hover:scale-110 active:scale-95 ${
+          // On mobile: always show the blue chat button regardless of open state
+          // On desktop: show X when open, chat icon when closed
+          (!isMobile && open)
+            ? dark ? "bg-white/10 border border-white/20" : "bg-slate-200 border border-slate-300"
+            : "bg-blue-600 hover:bg-blue-700"
+        }`}
         title="AI Analyst"
       >
-        {open ? (
+        {/* Desktop open state → show X */}
+        {!isMobile && open ? (
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={dark ? "text-white/60" : "text-slate-600"}>
             <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
           </svg>
         ) : (
+          // Mobile (any state) + Desktop closed → always show chat icon
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
             <circle cx="9" cy="10" r="1" fill="white" stroke="none" />
@@ -532,7 +522,6 @@ export default function AIChatBot({ client, from, to, dark, isAdmin }: Props) {
             onMouseDown={!isMobile ? onDragStart : undefined}
             onTouchStart={!isMobile ? onDragStart : undefined}
           >
-            {/* Mobile swipe pill */}
             {isMobile && (
               <div className={`absolute top-2.5 left-1/2 -translate-x-1/2 w-10 h-1 rounded-full ${dark ? "bg-white/15" : "bg-slate-300"}`} />
             )}
@@ -550,24 +539,23 @@ export default function AIChatBot({ client, from, to, dark, isAdmin }: Props) {
               </p>
             </div>
 
-            {/* Drag dots hint (desktop) */}
             {!isMobile && (
               <svg xmlns="http://www.w3.org/2000/svg" width="10" height="14" viewBox="0 0 10 14" className={`flex-shrink-0 ${dark ? "text-white/15" : "text-slate-300"}`}>
                 {[0, 1].map((col) => [0, 1, 2].map((row) => <circle key={`${col}-${row}`} cx={col * 5 + 2} cy={row * 5 + 2} r="1.2" fill="currentColor" />))}
               </svg>
             )}
 
-            {/* Status dot */}
             <div className={`w-2 h-2 rounded-full flex-shrink-0 ${fetching ? "bg-yellow-400 animate-pulse" : reportData ? "bg-emerald-400" : fetchError ? "bg-red-400" : dark ? "bg-white/20" : "bg-slate-300"}`} />
 
-            {/* Mobile close */}
-            {isMobile && (
-              <button onClick={handleToggle} className={`ml-1 w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${dark ? "bg-white/[0.06] text-white/50" : "bg-slate-200 text-slate-500"}`}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            )}
+            {/* Close button — shown in header on both mobile and desktop */}
+            <button
+              onClick={handleToggle}
+              className={`ml-1 w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${dark ? "bg-white/[0.06] text-white/50 hover:bg-white/[0.12] hover:text-white/80" : "bg-slate-200 text-slate-500 hover:bg-slate-300 hover:text-slate-700"} transition-colors`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
           </div>
 
           {/* ── Messages ─────────────────────────────────────────────────── */}
@@ -653,7 +641,7 @@ export default function AIChatBot({ client, from, to, dark, isAdmin }: Props) {
                   rows={1}
                   disabled={loading || streaming}
                   className={`flex-1 resize-none bg-transparent text-[13px] outline-none leading-relaxed disabled:opacity-40 ${dark ? "text-white placeholder:text-white/20" : "text-slate-800 placeholder:text-slate-400"}`}
-                  style={{ maxHeight: 120 }}
+                  style={{ maxHeight: 120, fontSize: 16 }}
                 />
                 <button
                   onClick={() => sendMessage()}
