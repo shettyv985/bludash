@@ -450,7 +450,7 @@ export default function AIChatBot({ client, from, to, dark, isAdmin }: Props) {
       {/* ── Toggle button — always shows chat icon, never shows X on mobile ── */}
       <button
         onClick={handleToggle}
-        style={{ width: 52, height: 52, position: "fixed", bottom: 24, right: 24, zIndex: 51 }}
+        style={{ width: 52, height: 52, position: "fixed", bottom: 24, right: 24, zIndex: 51, display: isMobile && open ? "none" : "flex" }}
         className={`rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 hover:scale-110 active:scale-95 ${
           // On mobile: always show the blue chat button regardless of open state
           // On desktop: show X when open, chat icon when closed
