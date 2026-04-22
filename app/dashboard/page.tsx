@@ -37,6 +37,13 @@ export default function DashboardPage() {
     document.documentElement.classList.toggle("dark", dark);
   }, [dark]);
 
+  const handleThemeToggle = () => {
+    // Stamp a transitioning class on <html> so every element smoothly crossfades
+    document.documentElement.classList.add("theme-transitioning");
+    setTimeout(() => document.documentElement.classList.remove("theme-transitioning"), 450);
+    setDark(!dark);
+  };
+
   const handleLogout = () => {
     localStorage.removeItem("bludash_user");
     router.push("/login");
@@ -97,11 +104,24 @@ export default function DashboardPage() {
         .ham-open .ham-line:nth-child(1) { transform: translateY(4px) rotate(45deg); }
         .ham-open .ham-line:nth-child(2) { opacity: 0; }
         .ham-open .ham-line:nth-child(3) { transform: translateY(-4px) rotate(-45deg); }
+
+        /* Smooth theme transition — blanket rule applied temporarily via JS */
+        .theme-transitioning,
+        .theme-transitioning *,
+        .theme-transitioning *::before,
+        .theme-transitioning *::after {
+          transition:
+            background-color 0.4s ease,
+            border-color 0.4s ease,
+            color 0.4s ease,
+            opacity 0.4s ease,
+            box-shadow 0.4s ease !important;
+        }
       `}</style>
 
       <div
         style={{ fontFamily: "var(--font-dm-sans), sans-serif" }}
-        className={`m-0 min-h-screen w-full flex flex-col transition-colors duration-300 relative overflow-x-hidden ${
+        className={`m-0 min-h-screen w-full flex flex-col transition-colors duration-400 relative overflow-x-hidden ${
           dark ? "bg-[#06060c]" : "bg-[#eef0f6]"
         }`}
       >
@@ -124,18 +144,18 @@ export default function DashboardPage() {
         </div>
 
         {/* ── Navbar ── */}
-        <nav className={`relative z-20 border-b ${
+        <nav className={`relative z-20 border-b transition-colors duration-400 ${
           dark ? "border-white/[0.05]" : "border-slate-200/80"
         }`}>
           {/* Top bar */}
           <div className="flex items-center justify-between px-4 sm:px-6 py-4">
-            {/* Logo — unchanged */}
+            {/* Logo */}
             <div className="flex items-center gap-2">
               <div className="w-[7px] h-[7px] rounded-full bg-blue-600 flex-shrink-0" />
               <div className="flex items-baseline gap-[1px]">
                 <span
                   style={{ fontFamily: "var(--font-dm-serif), serif", fontStyle: "italic" }}
-                  className={`text-[20px] font-normal tracking-tight ${dark ? "text-white" : "text-slate-900"}`}
+                  className={`text-[20px] font-normal tracking-tight transition-colors duration-400 ${dark ? "text-white" : "text-slate-900"}`}
                 >
                   Blu
                 </span>
@@ -151,7 +171,7 @@ export default function DashboardPage() {
             {/* Desktop nav right — hidden below sm */}
             <div className="hidden sm:flex items-center gap-2">
               {isAdmin && (
-                <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[10px] font-semibold tracking-wider uppercase ${
+                <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[10px] font-semibold tracking-wider uppercase transition-colors duration-400 ${
                   dark ? "border-blue-500/30 bg-blue-500/10 text-blue-400" : "border-blue-500/30 bg-blue-50 text-blue-600"
                 }`}>
                   <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -161,18 +181,18 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${
+              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-colors duration-400 ${
                 dark ? "border-white/8 bg-white/[0.03]" : "border-slate-200 bg-white/60"
               }`}>
                 <div className="w-[6px] h-[6px] rounded-full bg-emerald-500/80" />
-                <span className={`text-[12px] font-normal ${dark ? "text-white/45" : "text-slate-500"}`}>
+                <span className={`text-[12px] font-normal transition-colors duration-400 ${dark ? "text-white/45" : "text-slate-500"}`}>
                   {user.name}
                 </span>
               </div>
 
               <button
-                onClick={() => setDark(!dark)}
-                className={`p-2 rounded-lg border transition-all duration-200 flex items-center justify-center ${
+                onClick={handleThemeToggle}
+                className={`p-2 rounded-lg border transition-all duration-400 flex items-center justify-center ${
                   dark
                     ? "bg-white/5 border-white/8 text-white/35 hover:text-white/70 hover:bg-white/8"
                     : "bg-slate-900/6 border-slate-900/12 text-slate-500 hover:text-slate-900 hover:bg-slate-900/10"
@@ -183,7 +203,7 @@ export default function DashboardPage() {
 
               <button
                 onClick={handleLogout}
-                className={`text-[12px] px-3 py-1.5 rounded-lg border transition-all duration-200 ${
+                className={`text-[12px] px-3 py-1.5 rounded-lg border transition-all duration-400 ${
                   dark
                     ? "border-white/8 text-white/35 hover:text-white/70 hover:border-white/15 hover:bg-white/[0.03]"
                     : "border-slate-200 text-slate-500 hover:text-slate-800 hover:border-slate-300 hover:bg-slate-100/60"
@@ -193,11 +213,11 @@ export default function DashboardPage() {
               </button>
             </div>
 
-            {/* Mobile right — theme + hamburger — visible below sm only */}
+            {/* Mobile right — theme + hamburger */}
             <div className="flex items-center gap-2 sm:hidden">
               <button
-                onClick={() => setDark(!dark)}
-                className={`p-2 rounded-lg border transition-all duration-200 flex items-center justify-center ${
+                onClick={handleThemeToggle}
+                className={`p-2 rounded-lg border transition-all duration-400 flex items-center justify-center ${
                   dark
                     ? "bg-white/5 border-white/8 text-white/35 hover:text-white/70"
                     : "bg-slate-900/6 border-slate-900/12 text-slate-500 hover:text-slate-900"
@@ -208,35 +228,34 @@ export default function DashboardPage() {
 
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className={`p-[9px] rounded-lg border transition-all duration-200 flex flex-col items-center justify-center gap-[3.5px] ${
+                className={`p-[9px] rounded-lg border transition-all duration-400 flex flex-col items-center justify-center gap-[3.5px] ${
                   mobileMenuOpen ? "ham-open" : ""
                 } ${dark ? "bg-white/5 border-white/8" : "bg-slate-900/6 border-slate-900/12"}`}
                 aria-label="Toggle menu"
               >
-                <span className={`ham-line ${dark ? "bg-white/50" : "bg-slate-600"}`} />
-                <span className={`ham-line ${dark ? "bg-white/50" : "bg-slate-600"}`} />
-                <span className={`ham-line ${dark ? "bg-white/50" : "bg-slate-600"}`} />
+                <span className={`ham-line transition-colors duration-400 ${dark ? "bg-white/50" : "bg-slate-600"}`} />
+                <span className={`ham-line transition-colors duration-400 ${dark ? "bg-white/50" : "bg-slate-600"}`} />
+                <span className={`ham-line transition-colors duration-400 ${dark ? "bg-white/50" : "bg-slate-600"}`} />
               </button>
             </div>
           </div>
 
-          {/* Mobile dropdown — visible below sm only when open */}
+          {/* Mobile dropdown */}
           {mobileMenuOpen && (
-            <div className={`mobile-menu-anim sm:hidden border-t px-4 py-3 flex flex-col gap-2 ${
+            <div className={`mobile-menu-anim sm:hidden border-t px-4 py-3 flex flex-col gap-2 transition-colors duration-400 ${
               dark ? "border-white/[0.05]" : "border-slate-200/80"
             }`}>
-              {/* User + admin badge */}
-              <div className={`flex items-center justify-between px-3 py-2.5 rounded-lg border ${
+              <div className={`flex items-center justify-between px-3 py-2.5 rounded-lg border transition-colors duration-400 ${
                 dark ? "border-white/8 bg-white/[0.03]" : "border-slate-200 bg-white/60"
               }`}>
                 <div className="flex items-center gap-2">
                   <div className="w-[6px] h-[6px] rounded-full bg-emerald-500/80" />
-                  <span className={`text-[13px] font-normal ${dark ? "text-white/55" : "text-slate-600"}`}>
+                  <span className={`text-[13px] font-normal transition-colors duration-400 ${dark ? "text-white/55" : "text-slate-600"}`}>
                     {user.name}
                   </span>
                 </div>
                 {isAdmin && (
-                  <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[9px] font-semibold tracking-wider uppercase ${
+                  <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[9px] font-semibold tracking-wider uppercase transition-colors duration-400 ${
                     dark ? "border-blue-500/30 bg-blue-500/10 text-blue-400" : "border-blue-500/30 bg-blue-50 text-blue-600"
                   }`}>
                     <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -249,7 +268,7 @@ export default function DashboardPage() {
 
               <button
                 onClick={handleLogout}
-                className={`w-full text-left text-[13px] px-3 py-2.5 rounded-lg border transition-all duration-200 ${
+                className={`w-full text-left text-[13px] px-3 py-2.5 rounded-lg border transition-all duration-400 ${
                   dark
                     ? "border-white/8 text-white/40 hover:text-white/70 hover:border-white/15 hover:bg-white/[0.03]"
                     : "border-slate-200 text-slate-500 hover:text-slate-800 hover:border-slate-300 hover:bg-slate-100/60"
@@ -270,10 +289,10 @@ export default function DashboardPage() {
               <div className="mb-8 dash-anim-1">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-[7px] h-[7px] rounded-full bg-blue-600 flex-shrink-0" />
-                  <span className={`text-[10px] tracking-[0.18em] uppercase font-medium ${dark ? "text-white/28" : "text-slate-500"}`}>
+                  <span className={`text-[10px] tracking-[0.18em] uppercase font-medium transition-colors duration-400 ${dark ? "text-white/28" : "text-slate-500"}`}>
                     Report Builder
                   </span>
-                  <div className={`flex-1 h-px ${dark ? "bg-gradient-to-r from-white/10 to-transparent" : "bg-gradient-to-r from-slate-400/40 to-transparent"}`} />
+                  <div className={`flex-1 h-px transition-colors duration-400 ${dark ? "bg-gradient-to-r from-white/10 to-transparent" : "bg-gradient-to-r from-slate-400/40 to-transparent"}`} />
                 </div>
                 <h1
                   style={{
@@ -283,14 +302,18 @@ export default function DashboardPage() {
                     lineHeight: 1.1,
                     letterSpacing: "-0.02em",
                   }}
-                  className={dark ? "text-white" : "text-slate-900"}
+                  className={`transition-colors duration-400 ${dark ? "text-white" : "text-slate-900"}`}
                 >
                   Generate a{" "}
-                  <em style={{ fontStyle: "italic", color: dark ? "rgba(255,255,255,0.38)" : "rgba(71,85,105,0.65)" }}>
+                  <em style={{
+                    fontStyle: "italic",
+                    color: dark ? "rgba(255,255,255,0.38)" : "rgba(71,85,105,0.65)",
+                    transition: "color 0.4s ease",
+                  }}>
                     report
                   </em>
                 </h1>
-                <p className={`text-[13px] mt-1.5 font-normal ${dark ? "text-white/30" : "text-slate-500"}`}>
+                <p className={`text-[13px] mt-1.5 font-normal transition-colors duration-400 ${dark ? "text-white/30" : "text-slate-500"}`}>
                   Configure the filters below to generate your analytics report.
                 </p>
               </div>
@@ -311,9 +334,7 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="dash-anim-6">
-                  {/* Divider */}
-                  <div className={`h-px w-full mb-4 ${dark ? "bg-white/[0.05]" : "bg-slate-200/80"}`} />
-
+                  <div className={`h-px w-full mb-4 transition-colors duration-400 ${dark ? "bg-white/[0.05]" : "bg-slate-200/80"}`} />
                   <button
                     onClick={handleGenerate}
                     disabled={!isReady}

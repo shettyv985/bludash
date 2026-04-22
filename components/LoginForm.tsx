@@ -52,6 +52,8 @@ export default function LoginForm() {
         }
         .bludash-input {
           font-family: var(--font-dm-sans), sans-serif;
+          /* 16px prevents iOS/Android auto-zoom on focus */
+          font-size: 16px;
         }
         .bludash-input::placeholder {
           font-weight: 300;
@@ -69,6 +71,19 @@ export default function LoginForm() {
         .bludash-anim-7 { animation: bludash-fade-up 0.5s ease 0.35s both; }
         @keyframes bludash-spin { to { transform: rotate(360deg); } }
         .bludash-spin { animation: bludash-spin 0.8s linear infinite; }
+
+        /* Smooth theme transition — covers ALL properties on ALL elements */
+        .theme-transitioning,
+        .theme-transitioning *,
+        .theme-transitioning *::before,
+        .theme-transitioning *::after {
+          transition:
+            background-color 0.4s ease,
+            border-color 0.4s ease,
+            color 0.4s ease,
+            opacity 0.4s ease,
+            box-shadow 0.4s ease !important;
+        }
       `}</style>
 
       <div
@@ -78,7 +93,7 @@ export default function LoginForm() {
         }`}
       >
         {/* Grid overlay */}
-        <div className={`absolute inset-0 pointer-events-none ${dark ? "bludash-grid-bg" : "bludash-grid-bg-light"}`} />
+        <div className={`absolute inset-0 pointer-events-none transition-opacity duration-400 ${dark ? "bludash-grid-bg" : "bludash-grid-bg-light"}`} />
 
         {/* Ambient glow */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -97,8 +112,13 @@ export default function LoginForm() {
 
         {/* Theme toggle */}
         <button
-          onClick={() => setDark(!dark)}
-          className={`absolute top-5 right-5 p-2 rounded-lg border transition-all duration-200 flex items-center justify-center ${
+          onClick={() => {
+            // Apply transition class for smooth theme swap
+            document.documentElement.classList.add("theme-transitioning");
+            setTimeout(() => document.documentElement.classList.remove("theme-transitioning"), 450);
+            setDark(!dark);
+          }}
+          className={`absolute top-5 right-5 p-2 rounded-lg border transition-all duration-400 flex items-center justify-center ${
             dark
               ? "bg-white/5 border-white/8 text-white/35 hover:text-white/70 hover:bg-white/8"
               : "bg-slate-900/6 border-slate-900/12 text-slate-500 hover:text-slate-900 hover:bg-slate-900/10"
@@ -123,11 +143,11 @@ export default function LoginForm() {
 
           {/* Eyebrow */}
           <div className="flex items-center gap-3 mb-8 bludash-anim-1">
-            <div className={`w-[7px] h-[7px] rounded-full flex-shrink-0 ${dark ? "bg-blue-600" : "bg-blue-700"}`} />
-            <span className={`text-[10px] tracking-[0.18em] uppercase font-medium ${dark ? "text-white/28" : "text-slate-500"}`}>
+            <div className={`w-[7px] h-[7px] rounded-full flex-shrink-0 transition-colors duration-400 ${dark ? "bg-blue-600" : "bg-blue-700"}`} />
+            <span className={`text-[10px] tracking-[0.18em] uppercase font-medium transition-colors duration-400 ${dark ? "text-white/28" : "text-slate-500"}`}>
               Analytics Platform
             </span>
-            <div className={`flex-1 h-px ${dark ? "bg-gradient-to-r from-white/10 to-transparent" : "bg-gradient-to-r from-slate-400/40 to-transparent"}`} />
+            <div className={`flex-1 h-px transition-colors duration-400 ${dark ? "bg-gradient-to-r from-white/10 to-transparent" : "bg-gradient-to-r from-slate-400/40 to-transparent"}`} />
           </div>
 
           {/* Headline */}
@@ -139,24 +159,25 @@ export default function LoginForm() {
               lineHeight: 1.05,
               letterSpacing: "-0.02em",
             }}
-            className={`mb-2 bludash-anim-2 ${dark ? "text-white" : "text-slate-900"}`}
+            className={`mb-2 bludash-anim-2 transition-colors duration-400 ${dark ? "text-white" : "text-slate-900"}`}
           >
             Welcome to{" "}
             <em style={{
               fontStyle: "italic",
               color: dark ? "rgba(255,255,255,0.38)" : "rgba(71,85,105,0.65)",
+              transition: "color 0.4s ease",
             }}>
               Bludash
             </em>
           </h1>
 
-          <p className={`text-[13.5px] font-normal mb-10 bludash-anim-3 ${dark ? "text-white/32" : "text-slate-500"}`}>
+          <p className={`text-[13.5px] font-normal mb-10 bludash-anim-3 transition-colors duration-400 ${dark ? "text-white/32" : "text-slate-500"}`}>
             Sign in to continue to your workspace.
           </p>
 
           {/* Username */}
           <div className="flex flex-col gap-2 mb-4 bludash-anim-4">
-            <label className={`text-[10.5px] font-semibold tracking-[0.12em] uppercase ${dark ? "text-white/35" : "text-slate-500"}`}>
+            <label className={`text-[10.5px] font-semibold tracking-[0.12em] uppercase transition-colors duration-400 ${dark ? "text-white/35" : "text-slate-500"}`}>
               Username
             </label>
             <input
@@ -165,7 +186,8 @@ export default function LoginForm() {
               onChange={(e) => setUsername(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Enter your username"
-              className={`bludash-input w-full px-4 py-3 rounded-[10px] text-sm outline-none transition-all duration-200 ${
+              autoComplete="username"
+              className={`bludash-input w-full px-4 py-3 rounded-[10px] outline-none transition-all duration-400 ${
                 dark
                   ? "bg-white/[0.04] border border-white/9 text-white placeholder:text-white/18 focus:border-blue-500/50 focus:bg-white/[0.06]"
                   : "bg-white/80 border border-slate-300 text-slate-900 placeholder:text-slate-400 focus:border-blue-500/70 focus:bg-white"
@@ -175,7 +197,7 @@ export default function LoginForm() {
 
           {/* Password */}
           <div className="flex flex-col gap-2 mb-1 bludash-anim-5">
-            <label className={`text-[10.5px] font-semibold tracking-[0.12em] uppercase ${dark ? "text-white/35" : "text-slate-500"}`}>
+            <label className={`text-[10.5px] font-semibold tracking-[0.12em] uppercase transition-colors duration-400 ${dark ? "text-white/35" : "text-slate-500"}`}>
               Password
             </label>
             <div className="relative">
@@ -185,7 +207,8 @@ export default function LoginForm() {
                 onChange={(e) => setPassword(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Enter your password"
-                className={`bludash-input w-full px-4 py-3 pr-11 rounded-[10px] text-sm outline-none transition-all duration-200 ${
+                autoComplete="current-password"
+                className={`bludash-input w-full px-4 py-3 pr-11 rounded-[10px] outline-none transition-all duration-400 ${
                   dark
                     ? "bg-white/[0.04] border border-white/9 text-white placeholder:text-white/18 focus:border-blue-500/50 focus:bg-white/[0.06]"
                     : "bg-white/80 border border-slate-300 text-slate-900 placeholder:text-slate-400 focus:border-blue-500/70 focus:bg-white"
@@ -194,7 +217,7 @@ export default function LoginForm() {
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className={`absolute right-3 top-1/2 -translate-y-1/2 p-1 flex items-center justify-center transition-colors duration-200 ${
+                className={`absolute right-3 top-1/2 -translate-y-1/2 p-1 flex items-center justify-center transition-colors duration-400 ${
                   dark ? "text-white/25 hover:text-white/60" : "text-slate-400 hover:text-slate-700"
                 }`}
               >
@@ -227,7 +250,7 @@ export default function LoginForm() {
           <button
             onClick={handleLogin}
             disabled={loading}
-            className="bludash-anim-6 w-full mt-6 py-[13px] rounded-[10px] bg-blue-700 hover:bg-blue-800 active:scale-[0.99] text-white text-sm font-medium tracking-wide transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed relative overflow-hidden"
+            className="bludash-anim-6 w-full mt-6 py-[13px] rounded-[10px] bg-blue-700 hover:bg-blue-800 active:scale-[0.99] text-white text-sm font-medium tracking-wide transition-all duration-400 disabled:opacity-40 disabled:cursor-not-allowed relative overflow-hidden"
             style={{ boxShadow: "0 1px 3px rgba(29,78,216,0.25), inset 0 1px 0 rgba(255,255,255,0.1)" }}
           >
             {loading ? (
@@ -243,11 +266,11 @@ export default function LoginForm() {
 
           {/* Footer */}
           <div className="flex items-center gap-3 mt-8 bludash-anim-7">
-            <div className={`flex-1 h-px ${dark ? "bg-white/6" : "bg-slate-300/70"}`} />
-            <p className={`text-[10px] tracking-[0.05em] ${dark ? "text-white/20" : "text-slate-400"}`}>
+            <div className={`flex-1 h-px transition-colors duration-400 ${dark ? "bg-white/6" : "bg-slate-300/70"}`} />
+            <p className={`text-[10px] tracking-[0.05em] transition-colors duration-400 ${dark ? "text-white/20" : "text-slate-400"}`}>
               © {new Date().getFullYear()} Bludash
             </p>
-            <div className={`flex-1 h-px ${dark ? "bg-white/6" : "bg-slate-300/70"}`} />
+            <div className={`flex-1 h-px transition-colors duration-400 ${dark ? "bg-white/6" : "bg-slate-300/70"}`} />
           </div>
         </div>
       </div>
