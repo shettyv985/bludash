@@ -1,3 +1,4 @@
+// C:\Users\Varun Shetty\Desktop\New folder\bludash\app\dashboard\page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -86,7 +87,6 @@ export default function DashboardPage() {
         }
         .mobile-menu-anim { animation: mobile-menu-slide 0.2s ease both; }
 
-        /* Hamburger lines */
         .ham-line {
           display: block;
           width: 16px;
@@ -129,8 +129,8 @@ export default function DashboardPage() {
         }`}>
           {/* Top bar */}
           <div className="flex items-center justify-between px-4 sm:px-6 py-4">
-            {/* Logo */}
-            <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Logo — unchanged */}
+            <div className="flex items-center gap-2">
               <div className="w-[7px] h-[7px] rounded-full bg-blue-600 flex-shrink-0" />
               <div className="flex items-baseline gap-[1px]">
                 <span
@@ -148,7 +148,7 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Desktop nav right — hidden on mobile */}
+            {/* Desktop nav right — hidden below sm */}
             <div className="hidden sm:flex items-center gap-2">
               {isAdmin && (
                 <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[10px] font-semibold tracking-wider uppercase ${
@@ -170,7 +170,6 @@ export default function DashboardPage() {
                 </span>
               </div>
 
-              {/* Theme toggle */}
               <button
                 onClick={() => setDark(!dark)}
                 className={`p-2 rounded-lg border transition-all duration-200 flex items-center justify-center ${
@@ -194,9 +193,8 @@ export default function DashboardPage() {
               </button>
             </div>
 
-            {/* Mobile right — theme toggle + hamburger */}
+            {/* Mobile right — theme + hamburger — visible below sm only */}
             <div className="flex items-center gap-2 sm:hidden">
-              {/* Theme toggle (always visible on mobile) */}
               <button
                 onClick={() => setDark(!dark)}
                 className={`p-2 rounded-lg border transition-all duration-200 flex items-center justify-center ${
@@ -208,16 +206,11 @@ export default function DashboardPage() {
                 <ThemeIcon dark={dark} />
               </button>
 
-              {/* Hamburger */}
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className={`p-2 rounded-lg border transition-all duration-200 flex flex-col items-center justify-center gap-[3.5px] ${
+                className={`p-[9px] rounded-lg border transition-all duration-200 flex flex-col items-center justify-center gap-[3.5px] ${
                   mobileMenuOpen ? "ham-open" : ""
-                } ${
-                  dark
-                    ? "bg-white/5 border-white/8 text-white/50"
-                    : "bg-slate-900/6 border-slate-900/12 text-slate-600"
-                }`}
+                } ${dark ? "bg-white/5 border-white/8" : "bg-slate-900/6 border-slate-900/12"}`}
                 aria-label="Toggle menu"
               >
                 <span className={`ham-line ${dark ? "bg-white/50" : "bg-slate-600"}`} />
@@ -227,12 +220,12 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Mobile dropdown menu */}
+          {/* Mobile dropdown — visible below sm only when open */}
           {mobileMenuOpen && (
             <div className={`mobile-menu-anim sm:hidden border-t px-4 py-3 flex flex-col gap-2 ${
-              dark ? "border-white/[0.05] bg-[#06060c]" : "border-slate-200/80 bg-[#eef0f6]"
+              dark ? "border-white/[0.05]" : "border-slate-200/80"
             }`}>
-              {/* User row */}
+              {/* User + admin badge */}
               <div className={`flex items-center justify-between px-3 py-2.5 rounded-lg border ${
                 dark ? "border-white/8 bg-white/[0.03]" : "border-slate-200 bg-white/60"
               }`}>
@@ -254,10 +247,9 @@ export default function DashboardPage() {
                 )}
               </div>
 
-              {/* Logout */}
               <button
                 onClick={handleLogout}
-                className={`w-full text-[13px] px-3 py-2.5 rounded-lg border text-left transition-all duration-200 ${
+                className={`w-full text-left text-[13px] px-3 py-2.5 rounded-lg border transition-all duration-200 ${
                   dark
                     ? "border-white/8 text-white/40 hover:text-white/70 hover:border-white/15 hover:bg-white/[0.03]"
                     : "border-slate-200 text-slate-500 hover:text-slate-800 hover:border-slate-300 hover:bg-slate-100/60"
@@ -269,8 +261,8 @@ export default function DashboardPage() {
           )}
         </nav>
 
-        {/* Main */}
-        <main className="relative z-10 flex-1 px-4 py-8 sm:py-12">
+        {/* Main — untouched */}
+        <main className="relative z-10 flex-1 px-4 py-12">
           {!showReport ? (
             <div className="w-full max-w-[480px] mx-auto">
 
@@ -287,7 +279,7 @@ export default function DashboardPage() {
                   style={{
                     fontFamily: "var(--font-dm-serif), serif",
                     fontWeight: 400,
-                    fontSize: "clamp(24px, 6vw, 32px)",
+                    fontSize: "32px",
                     lineHeight: 1.1,
                     letterSpacing: "-0.02em",
                   }}
@@ -319,7 +311,9 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="dash-anim-6">
+                  {/* Divider */}
                   <div className={`h-px w-full mb-4 ${dark ? "bg-white/[0.05]" : "bg-slate-200/80"}`} />
+
                   <button
                     onClick={handleGenerate}
                     disabled={!isReady}
@@ -343,6 +337,7 @@ export default function DashboardPage() {
           )}
         </main>
 
+        {/* AI Chatbot — only for admin (blu123), always floats over everything */}
         <AIChatBot
           client={client}
           from={fromDate}
@@ -355,7 +350,6 @@ export default function DashboardPage() {
   );
 }
 
-/* Extracted icon to avoid repetition */
 function ThemeIcon({ dark }: { dark: boolean }) {
   return dark ? (
     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
