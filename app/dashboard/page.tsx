@@ -1,4 +1,3 @@
-// C:\Users\Varun Shetty\Desktop\New folder\bludash\app\dashboard\page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -23,6 +22,7 @@ export default function DashboardPage() {
   const [toDate, setToDate] = useState("");
   const [platform, setPlatform] = useState<Platform>("BOTH");
   const [showReport, setShowReport] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     const stored = localStorage.getItem("bludash_user");
@@ -79,6 +79,24 @@ export default function DashboardPage() {
         .dash-anim-4 { animation: dash-fade-up 0.45s ease 0.20s both; }
         .dash-anim-5 { animation: dash-fade-up 0.45s ease 0.25s both; }
         .dash-anim-6 { animation: dash-fade-up 0.45s ease 0.30s both; }
+
+        @keyframes mobile-menu-slide {
+          from { opacity: 0; transform: translateY(-6px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        .mobile-menu-anim { animation: mobile-menu-slide 0.2s ease both; }
+
+        /* Hamburger lines */
+        .ham-line {
+          display: block;
+          width: 16px;
+          height: 1.5px;
+          border-radius: 2px;
+          transition: all 0.2s ease;
+        }
+        .ham-open .ham-line:nth-child(1) { transform: translateY(4px) rotate(45deg); }
+        .ham-open .ham-line:nth-child(2) { opacity: 0; }
+        .ham-open .ham-line:nth-child(3) { transform: translateY(-4px) rotate(-45deg); }
       `}</style>
 
       <div
@@ -105,92 +123,154 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Navbar */}
-        <nav className={`relative z-10 flex items-center justify-between px-6 py-4 border-b ${
+        {/* ── Navbar ── */}
+        <nav className={`relative z-20 border-b ${
           dark ? "border-white/[0.05]" : "border-slate-200/80"
         }`}>
-          {/* Logo */}
-          <div className="flex items-center gap-2">
-            <div className="w-[7px] h-[7px] rounded-full bg-blue-600 flex-shrink-0" />
-            <div className="flex items-baseline gap-[1px]">
-              <span
-                style={{ fontFamily: "var(--font-dm-serif), serif", fontStyle: "italic" }}
-                className={`text-[20px] font-normal tracking-tight ${dark ? "text-white" : "text-slate-900"}`}
-              >
-                Blu
-              </span>
-              <span
-                style={{ fontFamily: "var(--font-dm-serif), serif" }}
-                className="text-[20px] font-normal tracking-tight text-blue-600"
-              >
-                dash
-              </span>
-            </div>
-          </div>
-
-          {/* Nav right */}
-          <div className="flex items-center gap-2">
-            {/* Admin badge */}
-            {isAdmin && (
-              <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[10px] font-semibold tracking-wider uppercase ${
-                dark ? "border-blue-500/30 bg-blue-500/10 text-blue-400" : "border-blue-500/30 bg-blue-50 text-blue-600"
-              }`}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                </svg>
-                Admin
+          {/* Top bar */}
+          <div className="flex items-center justify-between px-4 sm:px-6 py-4">
+            {/* Logo */}
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <div className="w-[7px] h-[7px] rounded-full bg-blue-600 flex-shrink-0" />
+              <div className="flex items-baseline gap-[1px]">
+                <span
+                  style={{ fontFamily: "var(--font-dm-serif), serif", fontStyle: "italic" }}
+                  className={`text-[20px] font-normal tracking-tight ${dark ? "text-white" : "text-slate-900"}`}
+                >
+                  Blu
+                </span>
+                <span
+                  style={{ fontFamily: "var(--font-dm-serif), serif" }}
+                  className="text-[20px] font-normal tracking-tight text-blue-600"
+                >
+                  dash
+                </span>
               </div>
-            )}
-
-            {/* User badge */}
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${
-              dark ? "border-white/8 bg-white/[0.03]" : "border-slate-200 bg-white/60"
-            }`}>
-              <div className="w-[6px] h-[6px] rounded-full bg-emerald-500/80" />
-              <span className={`text-[12px] font-normal ${dark ? "text-white/45" : "text-slate-500"}`}>
-                {user.name}
-              </span>
             </div>
 
-            {/* Theme toggle */}
-            <button
-              onClick={() => setDark(!dark)}
-              className={`p-2 rounded-lg border transition-all duration-200 flex items-center justify-center ${
-                dark
-                  ? "bg-white/5 border-white/8 text-white/35 hover:text-white/70 hover:bg-white/8"
-                  : "bg-slate-900/6 border-slate-900/12 text-slate-500 hover:text-slate-900 hover:bg-slate-900/10"
-              }`}
-            >
-              {dark ? (
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
-                  <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-                  <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
-                  <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
-                </svg>
-              ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-                </svg>
+            {/* Desktop nav right — hidden on mobile */}
+            <div className="hidden sm:flex items-center gap-2">
+              {isAdmin && (
+                <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[10px] font-semibold tracking-wider uppercase ${
+                  dark ? "border-blue-500/30 bg-blue-500/10 text-blue-400" : "border-blue-500/30 bg-blue-50 text-blue-600"
+                }`}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                  </svg>
+                  Admin
+                </div>
               )}
-            </button>
 
-            {/* Logout */}
-            <button
-              onClick={handleLogout}
-              className={`text-[12px] px-3 py-1.5 rounded-lg border transition-all duration-200 ${
-                dark
-                  ? "border-white/8 text-white/35 hover:text-white/70 hover:border-white/15 hover:bg-white/[0.03]"
-                  : "border-slate-200 text-slate-500 hover:text-slate-800 hover:border-slate-300 hover:bg-slate-100/60"
-              }`}
-            >
-              Logout
-            </button>
+              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${
+                dark ? "border-white/8 bg-white/[0.03]" : "border-slate-200 bg-white/60"
+              }`}>
+                <div className="w-[6px] h-[6px] rounded-full bg-emerald-500/80" />
+                <span className={`text-[12px] font-normal ${dark ? "text-white/45" : "text-slate-500"}`}>
+                  {user.name}
+                </span>
+              </div>
+
+              {/* Theme toggle */}
+              <button
+                onClick={() => setDark(!dark)}
+                className={`p-2 rounded-lg border transition-all duration-200 flex items-center justify-center ${
+                  dark
+                    ? "bg-white/5 border-white/8 text-white/35 hover:text-white/70 hover:bg-white/8"
+                    : "bg-slate-900/6 border-slate-900/12 text-slate-500 hover:text-slate-900 hover:bg-slate-900/10"
+                }`}
+              >
+                <ThemeIcon dark={dark} />
+              </button>
+
+              <button
+                onClick={handleLogout}
+                className={`text-[12px] px-3 py-1.5 rounded-lg border transition-all duration-200 ${
+                  dark
+                    ? "border-white/8 text-white/35 hover:text-white/70 hover:border-white/15 hover:bg-white/[0.03]"
+                    : "border-slate-200 text-slate-500 hover:text-slate-800 hover:border-slate-300 hover:bg-slate-100/60"
+                }`}
+              >
+                Logout
+              </button>
+            </div>
+
+            {/* Mobile right — theme toggle + hamburger */}
+            <div className="flex items-center gap-2 sm:hidden">
+              {/* Theme toggle (always visible on mobile) */}
+              <button
+                onClick={() => setDark(!dark)}
+                className={`p-2 rounded-lg border transition-all duration-200 flex items-center justify-center ${
+                  dark
+                    ? "bg-white/5 border-white/8 text-white/35 hover:text-white/70"
+                    : "bg-slate-900/6 border-slate-900/12 text-slate-500 hover:text-slate-900"
+                }`}
+              >
+                <ThemeIcon dark={dark} />
+              </button>
+
+              {/* Hamburger */}
+              <button
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className={`p-2 rounded-lg border transition-all duration-200 flex flex-col items-center justify-center gap-[3.5px] ${
+                  mobileMenuOpen ? "ham-open" : ""
+                } ${
+                  dark
+                    ? "bg-white/5 border-white/8 text-white/50"
+                    : "bg-slate-900/6 border-slate-900/12 text-slate-600"
+                }`}
+                aria-label="Toggle menu"
+              >
+                <span className={`ham-line ${dark ? "bg-white/50" : "bg-slate-600"}`} />
+                <span className={`ham-line ${dark ? "bg-white/50" : "bg-slate-600"}`} />
+                <span className={`ham-line ${dark ? "bg-white/50" : "bg-slate-600"}`} />
+              </button>
+            </div>
           </div>
+
+          {/* Mobile dropdown menu */}
+          {mobileMenuOpen && (
+            <div className={`mobile-menu-anim sm:hidden border-t px-4 py-3 flex flex-col gap-2 ${
+              dark ? "border-white/[0.05] bg-[#06060c]" : "border-slate-200/80 bg-[#eef0f6]"
+            }`}>
+              {/* User row */}
+              <div className={`flex items-center justify-between px-3 py-2.5 rounded-lg border ${
+                dark ? "border-white/8 bg-white/[0.03]" : "border-slate-200 bg-white/60"
+              }`}>
+                <div className="flex items-center gap-2">
+                  <div className="w-[6px] h-[6px] rounded-full bg-emerald-500/80" />
+                  <span className={`text-[13px] font-normal ${dark ? "text-white/55" : "text-slate-600"}`}>
+                    {user.name}
+                  </span>
+                </div>
+                {isAdmin && (
+                  <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[9px] font-semibold tracking-wider uppercase ${
+                    dark ? "border-blue-500/30 bg-blue-500/10 text-blue-400" : "border-blue-500/30 bg-blue-50 text-blue-600"
+                  }`}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                    </svg>
+                    Admin
+                  </div>
+                )}
+              </div>
+
+              {/* Logout */}
+              <button
+                onClick={handleLogout}
+                className={`w-full text-[13px] px-3 py-2.5 rounded-lg border text-left transition-all duration-200 ${
+                  dark
+                    ? "border-white/8 text-white/40 hover:text-white/70 hover:border-white/15 hover:bg-white/[0.03]"
+                    : "border-slate-200 text-slate-500 hover:text-slate-800 hover:border-slate-300 hover:bg-slate-100/60"
+                }`}
+              >
+                Logout
+              </button>
+            </div>
+          )}
         </nav>
 
         {/* Main */}
-        <main className="relative z-10 flex-1 px-4 py-12">
+        <main className="relative z-10 flex-1 px-4 py-8 sm:py-12">
           {!showReport ? (
             <div className="w-full max-w-[480px] mx-auto">
 
@@ -207,7 +287,7 @@ export default function DashboardPage() {
                   style={{
                     fontFamily: "var(--font-dm-serif), serif",
                     fontWeight: 400,
-                    fontSize: "32px",
+                    fontSize: "clamp(24px, 6vw, 32px)",
                     lineHeight: 1.1,
                     letterSpacing: "-0.02em",
                   }}
@@ -239,9 +319,7 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="dash-anim-6">
-                  {/* Divider */}
                   <div className={`h-px w-full mb-4 ${dark ? "bg-white/[0.05]" : "bg-slate-200/80"}`} />
-
                   <button
                     onClick={handleGenerate}
                     disabled={!isReady}
@@ -265,7 +343,6 @@ export default function DashboardPage() {
           )}
         </main>
 
-        {/* AI Chatbot — only for admin (blu123), always floats over everything */}
         <AIChatBot
           client={client}
           from={fromDate}
@@ -275,5 +352,21 @@ export default function DashboardPage() {
         />
       </div>
     </>
+  );
+}
+
+/* Extracted icon to avoid repetition */
+function ThemeIcon({ dark }: { dark: boolean }) {
+  return dark ? (
+    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+      <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+    </svg>
+  ) : (
+    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+    </svg>
   );
 }
