@@ -8,6 +8,7 @@ import OptionDropdown from "@/components/dashboard/OptionDropdown";
 import DateRangePicker from "@/components/dashboard/DateRangePicker";
 import PlatformToggle from "@/components/dashboard/PlatformToggle";
 import SocialMediaReport from "@/components/dashboard/SocialMediaReport";
+import AIChatBot from "@/components/dashboard/AIChatBot";
 
 type Platform = "FB" | "IG" | "BOTH";
 
@@ -48,6 +49,7 @@ export default function DashboardPage() {
   const handleBack = () => setShowReport(false);
 
   const isReady = client && option && fromDate && toDate;
+  const isAdmin = user?.clientKey === "ALL";
 
   if (!user) return null;
 
@@ -128,6 +130,18 @@ export default function DashboardPage() {
 
           {/* Nav right */}
           <div className="flex items-center gap-2">
+            {/* Admin badge */}
+            {isAdmin && (
+              <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[10px] font-semibold tracking-wider uppercase ${
+                dark ? "border-blue-500/30 bg-blue-500/10 text-blue-400" : "border-blue-500/30 bg-blue-50 text-blue-600"
+              }`}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                </svg>
+                Admin
+              </div>
+            )}
+
             {/* User badge */}
             <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${
               dark ? "border-white/8 bg-white/[0.03]" : "border-slate-200 bg-white/60"
@@ -250,6 +264,15 @@ export default function DashboardPage() {
             />
           )}
         </main>
+
+        {/* AI Chatbot — only for admin (blu123), always floats over everything */}
+        <AIChatBot
+          client={client}
+          from={fromDate}
+          to={toDate}
+          dark={dark}
+          isAdmin={isAdmin}
+        />
       </div>
     </>
   );
