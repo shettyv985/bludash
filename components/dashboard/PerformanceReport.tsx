@@ -3,6 +3,7 @@
 // C:\Users\Varun Shetty\Desktop\New folder\bludash\components\dashboard\PerformanceReport.tsx
 
 import { useState, useEffect } from "react";
+import AdModal from "./AdModal";
 
 const BASE = "https://graph.facebook.com/v25.0";
 
@@ -33,6 +34,9 @@ interface Ad {
   campaignObjective: string;
   dailyBudget: number | null;
   lifetimeBudget: number | null;
+  thumbnail: string | null;
+  videoId: string | null;
+  isVideo: boolean;
   insights: AdInsight;
 }
 
@@ -138,47 +142,67 @@ function getCPCHighlight(cpc: number): "good" | "warn" | "bad" {
 }
 
 // ─── Ad Row ───────────────────────────────────────────────────────────────────
-function AdRow({ ad, dark, isEven, showCampaignCols }: { ad: Ad; dark: boolean; isEven: boolean; showCampaignCols: boolean }) {
+function AdRow({ ad, dark, isEven, showCampaignCols, onClick }: { ad: Ad; dark: boolean; isEven: boolean; showCampaignCols: boolean; onClick?: () => void }) {
   const ins = ad.insights;
   return (
-    <tr className={`border-t transition-colors ${dark
-      ? `border-white/[0.04] ${isEven ? "bg-white/[0.01]" : "bg-transparent"} hover:bg-white/[0.04]`
-      : `border-black/[0.05] ${isEven ? "bg-white" : "bg-slate-50/60"} hover:bg-blue-50/40`
-    }`}>
-      <td className="px-4 py-3 min-w-[160px]">
-        <p className={`text-[12px] font-medium leading-tight ${dark ? "text-white/80" : "text-slate-800"}`}>{ad.name}</p>
+    <tr
+      onClick={onClick}
+      className={`border-t transition-colors ${onClick ? "cursor-pointer" : ""} ${dark
+        ? `border-white/[0.04] ${isEven ? "bg-white/[0.01]" : "bg-transparent"} hover:bg-white/[0.04]`
+        : `border-black/[0.05] ${isEven ? "bg-white" : "bg-slate-50/60"} hover:bg-blue-50/40`
+      }`}>
+      <td className="px-3 py-2">
+        {ad.thumbnail ? (
+          <div className="relative w-10 h-10 rounded-lg overflow-hidden flex-shrink-0">
+            <img src={ad.thumbnail} alt="" className="w-full h-full object-cover" />
+            {ad.isVideo && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3" /></svg>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${dark ? "bg-white/[0.04]" : "bg-slate-100"}`}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className={dark ? "text-white/20" : "text-slate-300"}>
+              <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+            </svg>
+          </div>
+        )}
+      </td>
+      <td className="px-3 py-3 min-w-[140px] max-w-[180px]">
+        <p className={`text-[12px] font-medium leading-tight truncate ${dark ? "text-white/80" : "text-slate-800"}`}>{ad.name}</p>
         <StatusBadge status={ad.status} dark={dark} />
       </td>
       {showCampaignCols && (
         <>
-          <td className={`px-4 py-3 text-[11px] ${dark ? "text-white/40" : "text-slate-500"}`}>{ad.campaignName}</td>
-          <td className={`px-4 py-3 text-[11px] ${dark ? "text-white/40" : "text-slate-500"}`}>{ad.adSetName}</td>
+          <td className={`px-3 py-3 min-w-[120px] max-w-[160px] text-[11px] truncate ${dark ? "text-white/40" : "text-slate-500"}`}>{ad.campaignName}</td>
+          <td className={`px-3 py-3 min-w-[120px] max-w-[160px] text-[11px] truncate ${dark ? "text-white/40" : "text-slate-500"}`}>{ad.adSetName}</td>
         </>
       )}
-      <td className="px-4 py-3 text-right"><MetricCell value={fmtMoney(ins.spend)} dark={dark} /></td>
-      <td className="px-4 py-3 text-right"><MetricCell value={fmt(ins.reach)} dark={dark} /></td>
-      <td className="px-4 py-3 text-right"><MetricCell value={fmt(ins.impressions)} dark={dark} /></td>
-      <td className="px-4 py-3 text-right"><MetricCell value={fmt(ins.clicks)} dark={dark} /></td>
-      <td className="px-4 py-3 text-right"><MetricCell value={fmtPct(ins.ctr)} highlight={getCTRHighlight(ins.ctr)} dark={dark} /></td>
-      <td className="px-4 py-3 text-right"><MetricCell value={fmtMoney(ins.cpm)} dark={dark} /></td>
-      <td className="px-4 py-3 text-right"><MetricCell value={ins.cpc > 0 ? fmtMoney(ins.cpc) : "—"} highlight={ins.cpc > 0 ? getCPCHighlight(ins.cpc) : null} dark={dark} /></td>
-      <td className="px-4 py-3 text-right"><MetricCell value={fmt(ins.likes)} dark={dark} /></td>
-      <td className="px-4 py-3 text-right"><MetricCell value={fmt(ins.comments)} dark={dark} /></td>
-      <td className="px-4 py-3 text-right"><MetricCell value={fmt(ins.shares)} dark={dark} /></td>
-      <td className="px-4 py-3 text-right"><MetricCell value={fmt(ins.videoViews)} dark={dark} /></td>
+      <td className="px-3 py-3 text-right whitespace-nowrap"><MetricCell value={fmtMoney(ins.spend)} dark={dark} /></td>
+      <td className="px-3 py-3 text-right whitespace-nowrap"><MetricCell value={fmt(ins.reach)} dark={dark} /></td>
+      <td className="px-3 py-3 text-right whitespace-nowrap"><MetricCell value={fmt(ins.impressions)} dark={dark} /></td>
+      <td className="px-3 py-3 text-right whitespace-nowrap"><MetricCell value={fmt(ins.clicks)} dark={dark} /></td>
+      <td className="px-3 py-3 text-right whitespace-nowrap"><MetricCell value={fmtPct(ins.ctr)} highlight={getCTRHighlight(ins.ctr)} dark={dark} /></td>
+      <td className="px-3 py-3 text-right whitespace-nowrap"><MetricCell value={fmtMoney(ins.cpm)} dark={dark} /></td>
+      <td className="px-3 py-3 text-right whitespace-nowrap"><MetricCell value={ins.cpc > 0 ? fmtMoney(ins.cpc) : "—"} highlight={ins.cpc > 0 ? getCPCHighlight(ins.cpc) : null} dark={dark} /></td>
+      <td className="px-3 py-3 text-right whitespace-nowrap"><MetricCell value={fmt(ins.likes)} dark={dark} /></td>
+      <td className="px-3 py-3 text-right whitespace-nowrap"><MetricCell value={fmt(ins.comments)} dark={dark} /></td>
+      <td className="px-3 py-3 text-right whitespace-nowrap"><MetricCell value={fmt(ins.shares)} dark={dark} /></td>
+      <td className="px-3 py-3 text-right whitespace-nowrap"><MetricCell value={fmt(ins.videoViews)} dark={dark} /></td>
     </tr>
   );
 }
 
 // ─── Grouped View ─────────────────────────────────────────────────────────────
-function GroupedView({ campaigns, dark }: { campaigns: Campaign[]; dark: boolean }) {
+function GroupedView({ campaigns, dark, onAdClick }: { campaigns: Campaign[]; dark: boolean; onAdClick: (ad: Ad) => void }) {
   const [openCampaigns, setOpenCampaigns] = useState<Record<string, boolean>>({});
   const [openAdSets, setOpenAdSets] = useState<Record<string, boolean>>({});
 
   const toggleCampaign = (id: string) => setOpenCampaigns(p => ({ ...p, [id]: !p[id] }));
   const toggleAdSet    = (id: string) => setOpenAdSets(p => ({ ...p, [id]: !p[id] }));
 
-  const colHeaders = ["Ad", "Spend", "Reach", "Impressions", "Clicks", "CTR", "CPM", "CPC", "Likes", "Comments", "Shares", "Video Views"];
+  const colHeaders = ["", "Ad", "Spend", "Reach", "Impressions", "Clicks", "CTR", "CPM", "CPC", "Likes", "Comments", "Shares", "Video Views"];
   const rightAlign = new Set(["Spend", "Reach", "Impressions", "Clicks", "CTR", "CPM", "CPC", "Likes", "Comments", "Shares", "Video Views"]);
 
   return (
@@ -260,7 +284,7 @@ function GroupedView({ campaigns, dark }: { campaigns: Campaign[]; dark: boolean
                             </thead>
                             <tbody>
                               {setAds.map((ad, idx) => (
-                                <AdRow key={ad.id} ad={ad} dark={dark} isEven={idx % 2 === 0} showCampaignCols={false} />
+                                <AdRow key={ad.id} ad={ad} dark={dark} isEven={idx % 2 === 0} showCampaignCols={false} onClick={() => onAdClick(ad)} />
                               ))}
                             </tbody>
                           </table>
@@ -279,12 +303,16 @@ function GroupedView({ campaigns, dark }: { campaigns: Campaign[]; dark: boolean
 }
 
 // ─── Flat Table ───────────────────────────────────────────────────────────────
-function FlatTable({ ads, sortKey, sortDir, onSort, dark }: {
+function FlatTable({ ads, sortKey, sortDir, onSort, dark, onRowClick }: {
   ads: Ad[]; sortKey: SortKey; sortDir: SortDir;
   onSort: (key: SortKey) => void; dark: boolean;
+  onRowClick: (ad: Ad) => void;
 }) {
   const headers: { key: SortKey | null; label: string; right?: boolean }[] = [
-    { key: null,          label: "Ad / Campaign / Set" },
+    { key: null,          label: ""            },  // thumbnail
+    { key: null,          label: "Ad"          },
+    { key: null,          label: "Campaign"    },
+    { key: null,          label: "Ad Set"      },
     { key: "spend",       label: "Spend",       right: true },
     { key: "reach",       label: "Reach",       right: true },
     { key: "impressions", label: "Impressions", right: true },
@@ -307,26 +335,28 @@ function FlatTable({ ads, sortKey, sortDir, onSort, dark }: {
               {headers.map(h => (
                 <th key={h.label}
                   onClick={() => h.key && onSort(h.key)}
-                  className={`px-4 py-3.5 text-[9px] font-bold tracking-widest uppercase whitespace-nowrap select-none
+                  className={`px-3 py-3.5 text-[9px] font-bold tracking-widest uppercase whitespace-nowrap select-none
                     ${h.right ? "text-right" : "text-left"}
                     ${h.key ? "cursor-pointer hover:opacity-80" : ""}
                     ${h.key === sortKey ? (dark ? "text-blue-400" : "text-blue-600") : (dark ? "text-white/35" : "text-slate-400")}
                   `}>
-                  <span className="flex items-center gap-1 justify-end">
-                    {h.key && h.key === sortKey && (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                        {sortDir === "desc" ? <polyline points="6 9 12 15 18 9" /> : <polyline points="18 15 12 9 6 15" />}
-                      </svg>
-                    )}
-                    {h.label}
-                  </span>
+                  {h.right ? (
+                    <span className="flex items-center gap-1 justify-end">
+                      {h.key && h.key === sortKey && (
+                        <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                          {sortDir === "desc" ? <polyline points="6 9 12 15 18 9" /> : <polyline points="18 15 12 9 6 15" />}
+                        </svg>
+                      )}
+                      {h.label}
+                    </span>
+                  ) : h.label}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
             {ads.map((ad, idx) => (
-              <AdRow key={ad.id} ad={ad} dark={dark} isEven={idx % 2 === 0} showCampaignCols={true} />
+              <AdRow key={ad.id} ad={ad} dark={dark} isEven={idx % 2 === 0} showCampaignCols={true} onClick={() => onRowClick(ad)} />
             ))}
           </tbody>
         </table>
@@ -505,6 +535,8 @@ export default function PerformanceReport({ client, from, to, dark, onBack }: Pr
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [exportingCSV, setExportingCSV] = useState(false);
   const [exportingPDF, setExportingPDF] = useState(false);
+  const [selectedAd, setSelectedAd] = useState<Ad | null>(null);
+  const [cfgToken, setCfgToken] = useState("");
 
   useEffect(() => { fetchReport(); }, []);
 
@@ -517,6 +549,7 @@ export default function PerformanceReport({ client, from, to, dark, onBack }: Pr
 
       const token = cfg.token;
       const adAccountId = cfg.adAccountId;
+      setCfgToken(token);
 
       // Fetch campaigns
       setStep(1); setProgress(15);
@@ -532,7 +565,7 @@ export default function PerformanceReport({ client, from, to, dark, onBack }: Pr
 
       // Fetch ads
       setStep(3); setProgress(50);
-      const adsRes = await fetch(`${BASE}/${adAccountId}/ads?fields=id,name,status,campaign_id,adset_id&limit=200&access_token=${token}`);
+      const adsRes = await fetch(`${BASE}/${adAccountId}/ads?fields=id,name,status,campaign_id,adset_id,creative{thumbnail_url,image_url,object_story_spec,video_id}&limit=200&access_token=${token}`);
       const adsData = await adsRes.json();
       const rawAds = adsData.data || [];
 
@@ -565,6 +598,24 @@ export default function PerformanceReport({ client, from, to, dark, onBack }: Pr
         const ins = insMap[ad.id] || {};
         const camp = campMap[ad.campaign_id] || {};
         const adSet = adSetMap[ad.adset_id] || {};
+        const creative = ad.creative || {};
+        const spec = creative.object_story_spec || {};
+
+        // Extract thumbnail
+        const thumbnail =
+          creative.thumbnail_url ||
+          creative.image_url ||
+          spec.link_data?.picture ||
+          spec.photo_data?.url ||
+          null;
+
+        // Extract video id
+        const videoId =
+          creative.video_id ||
+          spec.video_data?.video_id ||
+          null;
+
+        const isVideo = !!videoId || !!spec.video_data;
         return {
           id: ad.id,
           name: ad.name,
@@ -576,6 +627,9 @@ export default function PerformanceReport({ client, from, to, dark, onBack }: Pr
           campaignObjective: camp.objective || "",
           dailyBudget: adSet.daily_budget ? parseInt(adSet.daily_budget) / 100 : null,
           lifetimeBudget: adSet.lifetime_budget ? parseInt(adSet.lifetime_budget) / 100 : null,
+          thumbnail,
+          videoId,
+          isVideo,
           insights: {
             spend:       parseFloat(ins.spend       || "0"),
             reach:       parseInt(ins.reach         || "0"),
@@ -852,14 +906,19 @@ export default function PerformanceReport({ client, from, to, dark, onBack }: Pr
 
       {/* ── Main Content ── */}
       {viewMode === "flat"
-        ? <FlatTable ads={filteredAds} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} dark={dark} />
-        : <GroupedView campaigns={campaigns} dark={dark} />
+        ? <FlatTable ads={filteredAds} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} dark={dark} onRowClick={(ad) => setSelectedAd(ad)} />
+        : <GroupedView campaigns={campaigns} dark={dark} onAdClick={(ad) => setSelectedAd(ad)} />
       }
 
       {allAds.length === 0 && (
         <div className="flex flex-col items-center gap-3 py-16">
           <p className={`text-[13px] ${dark ? "text-white/30" : "text-slate-400"}`}>No ads found for this period.</p>
         </div>
+      )}
+
+      {/* Ad Modal */}
+      {selectedAd && (
+        <AdModal ad={selectedAd} onClose={() => setSelectedAd(null)} dark={dark} token={cfgToken} />
       )}
     </div>
   );
