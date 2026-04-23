@@ -340,7 +340,7 @@ function exportCSV(ads: Ad[], client: string, from: string, to: string) {
   const esc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
   const rows: string[] = [];
   rows.push([`Bludash Performance Report — ${client} — ${from} to ${to}`].map(esc).join(","));
-  rows.push([]);
+  rows.push("");
   rows.push(["Campaign", "Ad Set", "Ad", "Status", "Daily Budget", "Lifetime Budget",
     "Spend", "Reach", "Impressions", "Clicks", "CTR (%)", "CPM", "CPC",
     "Likes", "Comments", "Shares", "Video Views"].map(esc).join(","));
