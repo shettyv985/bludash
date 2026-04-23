@@ -1,4 +1,3 @@
-// C:\Users\Varun Shetty\Desktop\New folder\bludash\app\dashboard\page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -8,6 +7,7 @@ import OptionDropdown from "@/components/dashboard/OptionDropdown";
 import DateRangePicker from "@/components/dashboard/DateRangePicker";
 import PlatformToggle from "@/components/dashboard/PlatformToggle";
 import SocialMediaReport from "@/components/dashboard/SocialMediaReport";
+import PerformanceReport from "@/components/dashboard/PerformanceReport";
 import AIChatBot from "@/components/dashboard/AIChatBot";
 
 type Platform = "FB" | "IG" | "BOTH";
@@ -280,7 +280,7 @@ export default function DashboardPage() {
           )}
         </nav>
 
-        {/* Main — untouched */}
+        {/* Main */}
         <main className="relative z-10 flex-1 px-4 py-12">
           {!showReport ? (
             <div className="w-full max-w-[480px] mx-auto">
@@ -329,9 +329,12 @@ export default function DashboardPage() {
                 <div className="dash-anim-4">
                   <DateRangePicker from={fromDate} to={toDate} onFromChange={setFromDate} onToChange={setToDate} dark={dark} />
                 </div>
-                <div className="dash-anim-5">
-                  <PlatformToggle value={platform} onChange={setPlatform} dark={dark} />
-                </div>
+                {/* Platform toggle only shown for social media */}
+                {option !== "performance" && (
+                  <div className="dash-anim-5">
+                    <PlatformToggle value={platform} onChange={setPlatform} dark={dark} />
+                  </div>
+                )}
 
                 <div className="dash-anim-6">
                   <div className={`h-px w-full mb-4 transition-colors duration-400 ${dark ? "bg-white/[0.05]" : "bg-slate-200/80"}`} />
@@ -346,6 +349,14 @@ export default function DashboardPage() {
                 </div>
               </div>
             </div>
+          ) : option === "performance" ? (
+            <PerformanceReport
+              client={client}
+              from={fromDate}
+              to={toDate}
+              dark={dark}
+              onBack={handleBack}
+            />
           ) : (
             <SocialMediaReport
               client={client}
