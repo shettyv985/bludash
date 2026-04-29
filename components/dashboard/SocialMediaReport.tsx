@@ -753,6 +753,8 @@ export default function SocialMediaReport({ client, from, to, platform, dark, on
   const [igProfileViews, setIgProfileViews] = useState(0);
   const [exportingPDF, setExportingPDF]     = useState(false);
   const [exportingCSV, setExportingCSV]     = useState(false);
+  const [creatingManusReport, setCreatingManusReport] = useState(false);
+
 
   useEffect(() => { fetchReport(); }, []);
 
@@ -904,6 +906,47 @@ export default function SocialMediaReport({ client, from, to, platform, dark, on
     }
   };
 
+  const handleManusReportPDF = async () => {
+  if (!data) return;
+
+  setCreatingManusReport(true);
+  try {
+    const payload = {
+      type: "Social Media Report",
+      client,
+      from,
+      to,
+      data: {
+        platform,
+        fbPosts: data.fbPosts,
+        igPosts: data.igPosts,
+        fbFollows,
+        igFollows,
+        fbPageViews,
+        igProfileViews,
+      },
+    };
+
+    const res = await fetch("/api/manus-report", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const result = await res.json();
+    if (!res.ok) throw new Error(result?.error || "Failed to create Manus report");
+
+    window.open(result.taskUrl, "_blank", "noopener,noreferrer");
+  } catch (e: any) {
+    alert(e.message || "Failed to create Manus report");
+  } finally {
+    setCreatingManusReport(false);
+  }
+};
+
+
   const fromLabel = new Date(from).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
   const toLabel   = new Date(to).toLocaleDateString("en-IN",   { day: "2-digit", month: "short", year: "numeric" });
 
@@ -1016,6 +1059,28 @@ export default function SocialMediaReport({ client, from, to, platform, dark, on
             )}
             Export PDF
           </button>
+          <button
+  onClick={handleManusReportPDF}
+  disabled={creatingManusReport}
+  className={`flex items-center gap-1.5 text-[12px] px-3 py-1.5 rounded-lg border font-medium transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed ${
+    dark
+      ? "border-fuchsia-500/30 text-fuchsia-400 hover:bg-fuchsia-500/10 hover:border-fuchsia-500/50"
+      : "border-fuchsia-600/30 text-fuchsia-700 hover:bg-fuchsia-50 hover:border-fuchsia-600/50"
+  }`}
+>
+  {creatingManusReport ? (
+    <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+    </svg>
+  ) : (
+    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M12 3l2.5 5 5.5.8-4 3.9.9 5.5-4.9-2.6-4.9 2.6.9-5.5-4-3.9 5.5-.8L12 3z" />
+    </svg>
+  )}
+  ManusAI Report PDF
+</button>
+
         </div>
       </div>
 

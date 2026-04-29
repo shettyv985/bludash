@@ -74,7 +74,10 @@ interface ReportData {
 interface Message {
   role: "user" | "assistant";
   content: string;
+  taskUrl?: string;
 }
+
+
 
 interface Props {
   client: string;
@@ -323,9 +326,33 @@ export default function AIChatBot({ client, from, to, dark, isAdmin }: Props) {
             if (!body) return;
             let ins = (await (await fetch(`${BASE}/${ad.id}/insights?fields=spend,reach,impressions,clicks,cpm,ctr,actions,account_currency&time_range={"since":"${from}","until":"${to}"}&access_token=${cfg.token}`)).json()).data?.[0] || {};
             if (!ins.spend || parseFloat(ins.spend) === 0) ins = (await (await fetch(`${BASE}/${ad.id}/insights?fields=spend,reach,impressions,clicks,cpm,ctr,actions,account_currency&date_preset=maximum&access_token=${cfg.token}`)).json()).data?.[0] || ins;
-            const ga = (t: string) => parseInt(ins.actions?.find((a: any) => a.action_type === t)?.value || "0");
+  const getAction = (types: string[]) => {
+  for (const t of types) {
+    const found = ins.actions?.find((a: any) => a.action_type === t);
+    if (found) return parseInt(found.value || "0", 10);
+  }
+  return 0;
+};
+
+const entry = {
+  adName: ad.name,
+  status: ad.status,
+  amountSpent: ins.spend || "0",
+  paidReach: parseInt(ins.reach || "0", 10),
+  paidLikes: getAction(["onsite_conversion.post_net_like", "like", "post_reaction"]),
+  paidComments: getAction(["onsite_conversion.post_net_comment", "comment", "post_comment"]),
+  paidShares: getAction(["post", "share", "post_share"]),
+  impressions: parseInt(ins.impressions || "0", 10),
+  clicks: parseInt(ins.clicks || "0", 10),
+  cpm: parseFloat(ins.cpm || "0").toFixed(2),
+  ctr: parseFloat(ins.ctr || "0").toFixed(2),
+  body: body.trim(),
+};
+
+// Usage:
+// likes: getAction(["onsite_conversion.post_net_like", "like", "post_reaction"])
             const key = body.trim().substring(0, 100).toLowerCase();
-            const entry = { adName: ad.name, status: ad.status, amountSpent: ins.spend || "0", paidReach: parseInt(ins.reach || "0"), paidLikes: ga("onsite_conversion.post_net_like"), paidComments: ga("onsite_conversion.post_net_comment"), paidShares: ga("post"), impressions: parseInt(ins.impressions || "0"), clicks: parseInt(ins.clicks || "0"), cpm: parseFloat(ins.cpm || "0").toFixed(2), ctr: parseFloat(ins.ctr || "0").toFixed(2), body: body.trim() };
+
             if (!boostedMap[key] || parseFloat(entry.amountSpent) > parseFloat(boostedMap[key].amountSpent)) boostedMap[key] = entry;
           } catch {}
         }));
@@ -377,35 +404,53 @@ export default function AIChatBot({ client, from, to, dark, isAdmin }: Props) {
   };
 
   const sendMessage = async (text?: string) => {
-    const userText = (text || input).trim();
-    if (!userText || loading || streaming || !reportData) return;
-    setInput("");
-    if (inputRef.current) inputRef.current.style.height = "auto";
-    const newMessages: Message[] = [...messages, { role: "user", content: userText }];
-    setMessages(newMessages);
-    setLoading(true); setStreaming(false);
-    if (abortRef.current) abortRef.current.abort();
-    abortRef.current = new AbortController();
-    try {
-      const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: newMessages, reportData, client, from, to }), signal: abortRef.current.signal });
-      if (!res.ok) throw new Error("Failed to get response");
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error("No stream");
-      const decoder = new TextDecoder();
-      let txt = "";
-      setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
-      setLoading(false); setStreaming(true);
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        txt += decoder.decode(value, { stream: true });
-        setMessages((prev) => { const u = [...prev]; u[u.length - 1] = { role: "assistant", content: txt }; return u; });
-      }
-    } catch (e: any) {
-      if (e.name === "AbortError") return;
-      setMessages((prev) => [...prev, { role: "assistant", content: "Sorry, something went wrong. Please try again." }]);
-    } finally { setLoading(false); setStreaming(false); }
-  };
+  const userText = (text || input).trim();
+  if (!userText || loading || streaming || !reportData) return;
+
+  setInput("");
+  if (inputRef.current) inputRef.current.style.height = "auto";
+
+  const newMessages: Message[] = [...messages, { role: "user", content: userText }];
+  setMessages(newMessages);
+  setLoading(true);
+  setStreaming(false);
+
+  try {
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: newMessages, reportData, client, from, to }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data?.error || "Failed to get Manus response");
+    }
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: "assistant",
+        content: data.content || "No response returned.",
+        taskUrl: data.taskUrl || undefined,
+      },
+    ]);
+  } catch (e: any) {
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: "assistant",
+        content: e.message || "Sorry, something went wrong. Please try again.",
+      },
+    ]);
+  } finally {
+    setLoading(false);
+    setStreaming(false);
+  }
+};
+
+
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
@@ -608,11 +653,37 @@ export default function AIChatBot({ client, from, to, dark, isAdmin }: Props) {
                 {msg.role === "user" ? (
                   <div className="max-w-[85%] px-3 py-2 rounded-2xl rounded-tr-sm bg-blue-600 text-white text-[12.5px] leading-relaxed">{msg.content}</div>
                 ) : (
-                  <div className={`max-w-[95%] px-3 py-2.5 rounded-2xl rounded-tl-sm text-[12.5px] leading-relaxed ${dark ? "bg-white/[0.05] text-white/80" : "bg-slate-50 text-slate-800 border border-slate-100"}`}>
-                    {msg.content === "" && streaming
-                      ? <div className="flex gap-1 py-1">{[0, 1, 2].map((i) => <div key={i} className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />)}</div>
-                      : renderMarkdown(msg.content)}
-                  </div>
+      <div className={`max-w-[95%] px-3 py-2.5 rounded-2xl rounded-tl-sm text-[12.5px] leading-relaxed ${dark ? "bg-white/[0.05] text-white/80" : "bg-slate-50 text-slate-800 border border-slate-100"}`}>
+  {msg.content === "" && streaming ? (
+    <div className="flex gap-1 py-1">
+      {[0, 1, 2].map((i) => (
+        <div
+          key={i}
+          className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce"
+          style={{ animationDelay: `${i * 0.15}s` }}
+        />
+      ))}
+    </div>
+  ) : (
+    <>
+      {renderMarkdown(msg.content)}
+      {msg.taskUrl && (
+        <div className="mt-3">
+          <a
+            href={msg.taskUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-[12px] font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+          >
+            Open Full Task in Manus
+          </a>
+        </div>
+      )}
+    </>
+  )}
+</div>
+
+
                 )}
               </div>
             ))}
@@ -653,7 +724,11 @@ export default function AIChatBot({ client, from, to, dark, isAdmin }: Props) {
                   </svg>
                 </button>
               </div>
-              <p className={`text-[9px] text-center mt-1.5 ${dark ? "text-white/15" : "text-slate-300"}`}>Gemini 2.5 Pro · Enter to send</p>
+              <p className={`text-[9px] text-center mt-1.5 ${dark ? "text-white/15" : "text-slate-300"}`}>
+  Manus AI · Inline answer + full task link
+</p>
+
+
             </div>
           )}
         </div>
