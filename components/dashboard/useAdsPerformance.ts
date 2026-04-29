@@ -91,7 +91,7 @@ export function useAdsPerformance(
     let nextUrl: string | null = initialUrl;
 
     while (nextUrl && items.length < maxItems) {
-      const res = await fetch(nextUrl);
+      const res: Response = await fetch(nextUrl);
       const data = await res.json();
 
       if (data.error) {
