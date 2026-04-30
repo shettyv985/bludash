@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import AdModal from "./AdModal";
 import {
   useAdsPerformance,
@@ -9,6 +9,9 @@ import {
 } from "./useAdsPerformance";
 import { useManusReport } from "./useManusReport";
 import ManusReportToast from "./ManusReportToast";
+import { buildReportPayload } from "@/lib/buildReportPayload";
+import { generateReportPDF } from "@/lib/generateReportPDF";
+
 type SortKey =
   | "spend"
   | "reach"
@@ -20,7 +23,11 @@ type SortKey =
   | "likes"
   | "comments"
   | "shares"
-  | "videoViews";
+  | "videoViews"
+  | "leads"
+  | "cpl"
+  | "landingPageViews"
+  | "postEngagements";
 
 type SortDir = "asc" | "desc";
 type ViewMode = "grouped" | "flat";
@@ -54,6 +61,10 @@ function getCTRHighlight(ctr: number): "good" | "warn" | "bad" {
 
 function getCPCHighlight(cpc: number): "good" | "warn" | "bad" {
   return cpc < 5 ? "good" : cpc < 15 ? "warn" : "bad";
+}
+
+function getCPLHighlight(cpl: number): "good" | "warn" | "bad" {
+  return cpl < 100 ? "good" : cpl < 300 ? "warn" : "bad";
 }
 
 function SummaryCard({
@@ -238,18 +249,10 @@ function AdRow({
 
       {showCampaignCols && (
         <>
-          <td
-            className={`px-3 py-3 min-w-[120px] max-w-[160px] text-[11px] truncate ${
-              dark ? "text-white/40" : "text-slate-500"
-            }`}
-          >
+          <td className={`px-3 py-3 min-w-[120px] max-w-[160px] text-[11px] truncate ${dark ? "text-white/40" : "text-slate-500"}`}>
             {ad.campaignName}
           </td>
-          <td
-            className={`px-3 py-3 min-w-[120px] max-w-[160px] text-[11px] truncate ${
-              dark ? "text-white/40" : "text-slate-500"
-            }`}
-          >
+          <td className={`px-3 py-3 min-w-[120px] max-w-[160px] text-[11px] truncate ${dark ? "text-white/40" : "text-slate-500"}`}>
             {ad.adSetName}
           </td>
         </>
@@ -279,6 +282,26 @@ function AdRow({
           highlight={ins.cpc > 0 ? getCPCHighlight(ins.cpc) : null}
           dark={dark}
         />
+      </td>
+      <td className="px-3 py-3 text-right whitespace-nowrap">
+        <MetricCell
+          value={ins.leads > 0 ? fmt(ins.leads) : "—"}
+          highlight={ins.leads > 0 ? "good" : null}
+          dark={dark}
+        />
+      </td>
+      <td className="px-3 py-3 text-right whitespace-nowrap">
+        <MetricCell
+          value={ins.cpl > 0 ? fmtMoney(ins.cpl) : "—"}
+          highlight={ins.cpl > 0 ? getCPLHighlight(ins.cpl) : null}
+          dark={dark}
+        />
+      </td>
+      <td className="px-3 py-3 text-right whitespace-nowrap">
+        <MetricCell value={ins.landingPageViews > 0 ? fmt(ins.landingPageViews) : "—"} dark={dark} />
+      </td>
+      <td className="px-3 py-3 text-right whitespace-nowrap">
+        <MetricCell value={ins.postEngagements > 0 ? fmt(ins.postEngagements) : "—"} dark={dark} />
       </td>
       <td className="px-3 py-3 text-right whitespace-nowrap">
         <MetricCell value={fmt(ins.likes)} dark={dark} />
@@ -312,33 +335,16 @@ function GroupedView({
   const toggleAdSet = (id: string) => setOpenAdSets((p) => ({ ...p, [id]: !p[id] }));
 
   const colHeaders = [
-    "",
-    "Ad",
-    "Spend",
-    "Reach",
-    "Impressions",
-    "Clicks",
-    "CTR",
-    "CPM",
-    "CPC",
-    "Likes",
-    "Comments",
-    "Shares",
-    "Video Views",
+    "", "Ad",
+    "Spend", "Reach", "Impressions", "Clicks", "CTR", "CPM", "CPC",
+    "Leads", "CPL", "LP Views", "Engagements",
+    "Likes", "Comments", "Shares", "Video Views",
   ];
 
   const rightAlign = new Set([
-    "Spend",
-    "Reach",
-    "Impressions",
-    "Clicks",
-    "CTR",
-    "CPM",
-    "CPC",
-    "Likes",
-    "Comments",
-    "Shares",
-    "Video Views",
+    "Spend", "Reach", "Impressions", "Clicks", "CTR", "CPM", "CPC",
+    "Leads", "CPL", "LP Views", "Engagements",
+    "Likes", "Comments", "Shares", "Video Views",
   ]);
 
   return (
@@ -348,6 +354,7 @@ function GroupedView({
         const campAds = camp.adSets.flatMap((s) => s.ads);
         const campSpend = campAds.reduce((s, a) => s + a.insights.spend, 0);
         const campReach = campAds.reduce((s, a) => s + a.insights.reach, 0);
+        const campLeads = campAds.reduce((s, a) => s + a.insights.leads, 0);
 
         return (
           <div
@@ -369,16 +376,7 @@ function GroupedView({
                   campOpen ? "rotate-90" : ""
                 } ${dark ? "bg-white/[0.06]" : "bg-slate-200"}`}
               >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="10"
-                  height="10"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  className={dark ? "text-white/50" : "text-slate-500"}
-                >
+                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={dark ? "text-white/50" : "text-slate-500"}>
                   <polyline points="9 18 15 12 9 6" />
                 </svg>
               </div>
@@ -388,11 +386,7 @@ function GroupedView({
                 <span className={`text-[13px] font-semibold truncate ${dark ? "text-white/90" : "text-slate-800"}`}>
                   {camp.name}
                 </span>
-                <span
-                  className={`text-[10px] px-2 py-0.5 rounded-full ${
-                    dark ? "bg-blue-500/15 text-blue-400" : "bg-blue-100 text-blue-700"
-                  }`}
-                >
+                <span className={`text-[10px] px-2 py-0.5 rounded-full ${dark ? "bg-blue-500/15 text-blue-400" : "bg-blue-100 text-blue-700"}`}>
                   {camp.objective}
                 </span>
                 <StatusBadge status={camp.status} dark={dark} />
@@ -401,16 +395,18 @@ function GroupedView({
               <div className="flex items-center gap-4 flex-shrink-0">
                 <div className="text-right">
                   <p className={`text-[10px] ${dark ? "text-white/25" : "text-slate-400"}`}>Spend</p>
-                  <p className={`text-[12px] font-bold ${dark ? "text-white/70" : "text-slate-700"}`}>
-                    {fmtMoney(campSpend)}
-                  </p>
+                  <p className={`text-[12px] font-bold ${dark ? "text-white/70" : "text-slate-700"}`}>{fmtMoney(campSpend)}</p>
                 </div>
                 <div className="text-right">
                   <p className={`text-[10px] ${dark ? "text-white/25" : "text-slate-400"}`}>Reach</p>
-                  <p className={`text-[12px] font-bold ${dark ? "text-white/70" : "text-slate-700"}`}>
-                    {fmt(campReach)}
-                  </p>
+                  <p className={`text-[12px] font-bold ${dark ? "text-white/70" : "text-slate-700"}`}>{fmt(campReach)}</p>
                 </div>
+                {campLeads > 0 && (
+                  <div className="text-right">
+                    <p className={`text-[10px] ${dark ? "text-white/25" : "text-slate-400"}`}>Leads</p>
+                    <p className={`text-[12px] font-bold ${dark ? "text-emerald-400" : "text-emerald-600"}`}>{fmt(campLeads)}</p>
+                  </div>
+                )}
                 <span className={`text-[11px] ${dark ? "text-white/25" : "text-slate-400"}`}>
                   {campAds.length} ad{campAds.length !== 1 ? "s" : ""}
                 </span>
@@ -423,6 +419,7 @@ function GroupedView({
                   const setOpen = openAdSets[adSet.id] !== false;
                   const setAds = adSet.ads;
                   const setSpend = setAds.reduce((s, a) => s + a.insights.spend, 0);
+                  const setLeads = setAds.reduce((s, a) => s + a.insights.leads, 0);
 
                   return (
                     <div
@@ -437,21 +434,8 @@ function GroupedView({
                           dark ? "hover:bg-white/[0.02]" : "hover:bg-slate-100/60"
                         }`}
                       >
-                        <div
-                          className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 transition-transform ${
-                            setOpen ? "rotate-90" : ""
-                          } ${dark ? "bg-white/[0.04]" : "bg-slate-200"}`}
-                        >
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            width="8"
-                            height="8"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2.5"
-                            className={dark ? "text-white/40" : "text-slate-500"}
-                          >
+                        <div className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 transition-transform ${setOpen ? "rotate-90" : ""} ${dark ? "bg-white/[0.04]" : "bg-slate-200"}`}>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={dark ? "text-white/40" : "text-slate-500"}>
                             <polyline points="9 18 15 12 9 6" />
                           </svg>
                         </div>
@@ -471,6 +455,11 @@ function GroupedView({
                             Lifetime: {fmtMoney(adSet.lifetimeBudget)}
                           </span>
                         ) : null}
+                        {setLeads > 0 && (
+                          <span className={`text-[10px] font-bold ${dark ? "text-emerald-400" : "text-emerald-600"}`}>
+                            {setLeads} leads
+                          </span>
+                        )}
                         <span className={`text-[11px] font-semibold ml-2 ${dark ? "text-white/50" : "text-slate-600"}`}>
                           {fmtMoney(setSpend)}
                         </span>
@@ -489,7 +478,11 @@ function GroupedView({
                                     key={h}
                                     className={`px-4 py-2.5 text-[9px] font-bold tracking-widest uppercase ${
                                       rightAlign.has(h) ? "text-right" : "text-left"
-                                    } ${dark ? "text-white/30" : "text-slate-400"}`}
+                                    } ${dark ? "text-white/30" : "text-slate-400"} ${
+                                      ["Leads", "CPL"].includes(h)
+                                        ? dark ? "text-emerald-400/60" : "text-emerald-600/70"
+                                        : ""
+                                    }`}
                                   >
                                     {h}
                                   </th>
@@ -538,7 +531,7 @@ function FlatTable({
   dark: boolean;
   onRowClick: (ad: Ad) => void;
 }) {
-  const headers: { label: string; key?: SortKey; right?: boolean }[] = [
+  const headers: { label: string; key?: SortKey; right?: boolean; accent?: boolean }[] = [
     { label: "" },
     { label: "Ad" },
     { label: "Campaign" },
@@ -550,6 +543,10 @@ function FlatTable({
     { label: "CTR", key: "ctr", right: true },
     { label: "CPM", key: "cpm", right: true },
     { label: "CPC", key: "cpc", right: true },
+    { label: "Leads", key: "leads", right: true, accent: true },
+    { label: "CPL", key: "cpl", right: true, accent: true },
+    { label: "LP Views", key: "landingPageViews", right: true },
+    { label: "Engagements", key: "postEngagements", right: true },
     { label: "Likes", key: "likes", right: true },
     { label: "Comments", key: "comments", right: true },
     { label: "Shares", key: "shares", right: true },
@@ -575,7 +572,11 @@ function FlatTable({
                     key={h.label}
                     className={`px-4 py-2.5 text-[9px] font-bold tracking-widest uppercase ${
                       h.right ? "text-right" : "text-left"
-                    } ${dark ? "text-white/30" : "text-slate-400"}`}
+                    } ${
+                      h.accent
+                        ? dark ? "text-emerald-400/70" : "text-emerald-600/80"
+                        : dark ? "text-white/30" : "text-slate-400"
+                    }`}
                   >
                     {h.key ? (
                       <button
@@ -615,21 +616,10 @@ function FlatTable({
 
 function exportCSV(ads: Ad[], client: string, from: string, to: string) {
   const headers = [
-    "Ad Name",
-    "Status",
-    "Campaign",
-    "Ad Set",
-    "Spend",
-    "Reach",
-    "Impressions",
-    "Clicks",
-    "CTR",
-    "CPM",
-    "CPC",
-    "Likes",
-    "Comments",
-    "Shares",
-    "Video Views",
+    "Ad Name", "Status", "Campaign", "Ad Set",
+    "Spend", "Reach", "Impressions", "Clicks", "CTR", "CPM", "CPC",
+    "Leads", "CPL", "Landing Page Views", "Post Engagements",
+    "Likes", "Comments", "Shares", "Video Views",
   ];
 
   const escape = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`;
@@ -646,6 +636,10 @@ function exportCSV(ads: Ad[], client: string, from: string, to: string) {
     ad.insights.ctr.toFixed(2),
     ad.insights.cpm.toFixed(2),
     ad.insights.cpc.toFixed(2),
+    ad.insights.leads,
+    ad.insights.cpl.toFixed(2),
+    ad.insights.landingPageViews,
+    ad.insights.postEngagements,
     ad.insights.likes,
     ad.insights.comments,
     ad.insights.shares,
@@ -674,6 +668,8 @@ async function exportPDF(
     overallCPM: number;
     overallCPC: number;
     activeAds: number;
+    totalLeads: number;
+    overallCPL: number;
   },
   client: string,
   from: string,
@@ -705,27 +701,31 @@ async function exportPDF(
   const cards = [
     { label: "TOTAL SPEND", value: fmtMoney(summary.totalSpend) },
     { label: "TOTAL REACH", value: fmt(summary.totalReach) },
-    { label: "TOTAL IMPRESSIONS", value: fmt(summary.totalImpressions) },
-    { label: "TOTAL CLICKS", value: fmt(summary.totalClicks) },
+    { label: "IMPRESSIONS", value: fmt(summary.totalImpressions) },
+    { label: "CLICKS", value: fmt(summary.totalClicks) },
     { label: "CTR", value: fmtPct(summary.overallCTR) },
     { label: "CPM", value: fmtMoney(summary.overallCPM) },
     { label: "CPC", value: summary.overallCPC > 0 ? fmtMoney(summary.overallCPC) : "—" },
+    { label: "TOTAL LEADS", value: String(summary.totalLeads) },
+    { label: "CPL", value: summary.overallCPL > 0 ? fmtMoney(summary.overallCPL) : "—" },
     { label: "ACTIVE ADS", value: String(summary.activeAds) },
   ];
 
   let y = 38;
-  const cardW = (pageW - 20 - 7 * 3) / 8;
+  const cardCount = cards.length;
+  const cardW = (pageW - 20 - (cardCount - 1) * 2) / cardCount;
 
   cards.forEach((card, i) => {
-    const x = 10 + i * (cardW + 3);
-    doc.setFillColor(245, 246, 250);
+    const x = 10 + i * (cardW + 2);
+    const isLeadCard = card.label === "TOTAL LEADS" || card.label === "CPL";
+    doc.setFillColor(isLeadCard ? 236 : 245, isLeadCard ? 253 : 246, isLeadCard ? 243 : 250);
     doc.roundedRect(x, y, cardW, 18, 1, 1, "F");
-    doc.setTextColor(120, 120, 140);
-    doc.setFontSize(5.5);
+    doc.setTextColor(isLeadCard ? 4 : 120, isLeadCard ? 120 : 120, isLeadCard ? 80 : 140);
+    doc.setFontSize(5);
     doc.setFont("helvetica", "bold");
     doc.text(card.label, x + 2, y + 5);
-    doc.setTextColor(10, 10, 20);
-    doc.setFontSize(9);
+    doc.setTextColor(isLeadCard ? 5 : 10, isLeadCard ? 150 : 10, isLeadCard ? 80 : 20);
+    doc.setFontSize(8.5);
     doc.text(card.value, x + 2, y + 13);
   });
 
@@ -741,20 +741,10 @@ async function exportPDF(
   autoTable(doc, {
     startY: y,
     head: [[
-      "Ad Name",
-      "Campaign",
-      "Ad Set",
-      "Spend",
-      "Reach",
-      "Impressions",
-      "Clicks",
-      "CTR",
-      "CPM",
-      "CPC",
-      "Likes",
-      "Comments",
-      "Shares",
-      "Video Views",
+      "Ad Name", "Campaign", "Ad Set",
+      "Spend", "Reach", "Impressions", "Clicks", "CTR", "CPM", "CPC",
+      "Leads", "CPL", "LP Views", "Engagements",
+      "Likes", "Comments", "Shares", "Vid Views",
     ]],
     body: ads.map((ad) => [
       ad.name,
@@ -767,23 +757,21 @@ async function exportPDF(
       fmtPct(ad.insights.ctr),
       fmtMoney(ad.insights.cpm),
       ad.insights.cpc > 0 ? fmtMoney(ad.insights.cpc) : "—",
+      ad.insights.leads > 0 ? fmt(ad.insights.leads) : "—",
+      ad.insights.cpl > 0 ? fmtMoney(ad.insights.cpl) : "—",
+      ad.insights.landingPageViews > 0 ? fmt(ad.insights.landingPageViews) : "—",
+      ad.insights.postEngagements > 0 ? fmt(ad.insights.postEngagements) : "—",
       fmt(ad.insights.likes),
       fmt(ad.insights.comments),
       fmt(ad.insights.shares),
       fmt(ad.insights.videoViews),
     ]),
-    styles: {
-      fontSize: 7,
-      cellPadding: 2.2,
-      overflow: "linebreak",
-    },
-    headStyles: {
-      fillColor: [29, 78, 216],
-      textColor: [255, 255, 255],
-      fontStyle: "bold",
-    },
-    alternateRowStyles: {
-      fillColor: [248, 250, 252],
+    styles: { fontSize: 6, cellPadding: 1.8, overflow: "linebreak" },
+    headStyles: { fillColor: [29, 78, 216], textColor: [255, 255, 255], fontStyle: "bold" },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    columnStyles: {
+      10: { textColor: [5, 150, 80], fontStyle: "bold" },
+      11: { textColor: [5, 150, 80], fontStyle: "bold" },
     },
     margin: { left: 10, right: 10 },
   });
@@ -799,30 +787,29 @@ async function exportPDF(
 
   autoTable(doc, {
     startY: nextY + 12,
-    head: [["Campaign", "Objective", "Ad Sets", "Ads", "Spend", "Reach"]],
+    head: [["Campaign", "Objective", "Ad Sets", "Ads", "Spend", "Reach", "Leads", "CPL"]],
     body: campaigns.map((campaign) => {
       const campaignAds = campaign.adSets.flatMap((a) => a.ads);
+      const campSpend = campaignAds.reduce((sum, ad) => sum + ad.insights.spend, 0);
+      const campLeads = campaignAds.reduce((sum, ad) => sum + ad.insights.leads, 0);
+      const campCPL = campLeads > 0 ? campSpend / campLeads : 0;
       return [
         campaign.name,
         campaign.objective || "—",
         String(campaign.adSets.length),
         String(campaignAds.length),
-        fmtMoney(campaignAds.reduce((sum, ad) => sum + ad.insights.spend, 0)),
+        fmtMoney(campSpend),
         fmt(campaignAds.reduce((sum, ad) => sum + ad.insights.reach, 0)),
+        campLeads > 0 ? fmt(campLeads) : "—",
+        campCPL > 0 ? fmtMoney(campCPL) : "—",
       ];
     }),
-    styles: {
-      fontSize: 7,
-      cellPadding: 2.2,
-      overflow: "linebreak",
-    },
-    headStyles: {
-      fillColor: [29, 78, 216],
-      textColor: [255, 255, 255],
-      fontStyle: "bold",
-    },
-    alternateRowStyles: {
-      fillColor: [248, 250, 252],
+    styles: { fontSize: 7, cellPadding: 2.2, overflow: "linebreak" },
+    headStyles: { fillColor: [29, 78, 216], textColor: [255, 255, 255], fontStyle: "bold" },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    columnStyles: {
+      6: { textColor: [5, 150, 80], fontStyle: "bold" },
+      7: { textColor: [5, 150, 80], fontStyle: "bold" },
     },
     margin: { left: 10, right: 10 },
   });
@@ -832,9 +819,7 @@ async function exportPDF(
     doc.setPage(i);
     doc.setTextColor(140, 140, 160);
     doc.setFontSize(7);
-    doc.text(`Page ${i} of ${totalPages}`, pageW - 12, doc.internal.pageSize.getHeight() - 2.5, {
-      align: "right",
-    });
+    doc.text(`Page ${i} of ${totalPages}`, pageW - 12, doc.internal.pageSize.getHeight() - 2.5, { align: "right" });
   }
 
   doc.save(`bludash_performance_${client}_${from}_${to}.pdf`);
@@ -848,15 +833,38 @@ export default function PerformanceReport({ client, from, to, dark, onBack }: Pr
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [exportingCSV, setExportingCSV] = useState(false);
   const [exportingPDF, setExportingPDF] = useState(false);
-const { state: manusState, generateReport, dismiss: dismissManus } = useManusReport();
-const isGeneratingManus =
-  manusState.status === "creating" || manusState.status === "running" || manusState.status === "waiting";
+const { state: manusState, generateReport, setBuilding, dismiss: dismissManus } = useManusReport();
+  const isGeneratingManus =
+    manusState.status === "creating" || manusState.status === "running" || manusState.status === "waiting";
 
   const [selectedAd, setSelectedAd] = useState<Ad | null>(null);
 
   const { loading, error, ads: allAds, campaigns, token: cfgToken } =
     useAdsPerformance(client, from, to);
 
+  // ── Auto-trigger PDF as soon as Manus returns reportData ──────────────────
+// ── Auto-trigger Gemini HTML report as soon as Manus returns reportData ───
+// ── Stage 2: As soon as Manus JSON analysis is done, kick off HTML build ──
+useEffect(() => {
+  if (manusState.status === "done" && manusState.reportData) {
+    const payload = buildReportPayload(allAds, campaigns, client, from, to);
+    setBuilding("Manus is now building your HTML report…");
+    generateReportPDF(
+      payload,
+      manusState.reportData,
+      client,
+      from,
+      to,
+      (brief) => setBuilding(brief)
+    )
+      .then(() => dismissManus())
+      .catch((err) => {
+        console.error("HTML report failed:", err);
+        // don't dismiss — let user see error state in toast
+      });
+  }
+}, [manusState.status, manusState.reportData]);
+// ──────────────────────────────────────────────────────────────────────────
   const handleSort = (key: SortKey) => {
     if (key === sortKey) {
       setSortDir((d) => (d === "desc" ? "asc" : "desc"));
@@ -866,9 +874,6 @@ const isGeneratingManus =
     }
   };
 
- 
-
-
   const filteredAds = allAds
     .filter((ad) => {
       const q = search.toLowerCase();
@@ -876,34 +881,30 @@ const isGeneratingManus =
         ad.name.toLowerCase().includes(q) ||
         ad.campaignName.toLowerCase().includes(q) ||
         ad.adSetName.toLowerCase().includes(q);
-
       const matchStatus = statusFilter === "ALL" || ad.status === statusFilter;
       return matchSearch && matchStatus;
     })
     .sort((a, b) => {
-      const getVal = (ad: Ad) =>
-        sortKey === "spend"
-          ? ad.insights.spend
-          : sortKey === "reach"
-            ? ad.insights.reach
-            : sortKey === "impressions"
-              ? ad.insights.impressions
-              : sortKey === "clicks"
-                ? ad.insights.clicks
-                : sortKey === "ctr"
-                  ? ad.insights.ctr
-                  : sortKey === "cpm"
-                    ? ad.insights.cpm
-                    : sortKey === "cpc"
-                      ? ad.insights.cpc
-                      : sortKey === "likes"
-                        ? ad.insights.likes
-                        : sortKey === "comments"
-                          ? ad.insights.comments
-                          : sortKey === "shares"
-                            ? ad.insights.shares
-                            : ad.insights.videoViews;
-
+      const getVal = (ad: Ad): number => {
+        switch (sortKey) {
+          case "spend": return ad.insights.spend;
+          case "reach": return ad.insights.reach;
+          case "impressions": return ad.insights.impressions;
+          case "clicks": return ad.insights.clicks;
+          case "ctr": return ad.insights.ctr;
+          case "cpm": return ad.insights.cpm;
+          case "cpc": return ad.insights.cpc;
+          case "likes": return ad.insights.likes;
+          case "comments": return ad.insights.comments;
+          case "shares": return ad.insights.shares;
+          case "videoViews": return ad.insights.videoViews;
+          case "leads": return ad.insights.leads;
+          case "cpl": return ad.insights.cpl;
+          case "landingPageViews": return ad.insights.landingPageViews;
+          case "postEngagements": return ad.insights.postEngagements;
+          default: return 0;
+        }
+      };
       const aVal = getVal(a);
       const bVal = getVal(b);
       return sortDir === "desc" ? bVal - aVal : aVal - bVal;
@@ -917,10 +918,14 @@ const isGeneratingManus =
   const totalComments = allAds.reduce((s, a) => s + a.insights.comments, 0);
   const totalShares = allAds.reduce((s, a) => s + a.insights.shares, 0);
   const totalVideoViews = allAds.reduce((s, a) => s + a.insights.videoViews, 0);
+  const totalLeads = allAds.reduce((s, a) => s + a.insights.leads, 0);
+  const totalLandingPageViews = allAds.reduce((s, a) => s + a.insights.landingPageViews, 0);
+  const totalPostEngagements = allAds.reduce((s, a) => s + a.insights.postEngagements, 0);
 
   const overallCTR = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
   const overallCPM = totalImpressions > 0 ? (totalSpend / totalImpressions) * 1000 : 0;
   const overallCPC = totalClicks > 0 ? totalSpend / totalClicks : 0;
+  const overallCPL = totalLeads > 0 ? totalSpend / totalLeads : 0;
 
   const activeAds = allAds.filter((a) => a.status === "ACTIVE").length;
 
@@ -933,19 +938,12 @@ const isGeneratingManus =
     overallCPM,
     overallCPC,
     activeAds,
+    totalLeads,
+    overallCPL,
   };
 
-  const fromLabel = new Date(from).toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-
-  const toLabel = new Date(to).toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+  const fromLabel = new Date(from).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  const toLabel = new Date(to).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 
   const iconProps = {
     width: 13,
@@ -956,7 +954,6 @@ const isGeneratingManus =
     strokeWidth: 2,
     xmlns: "http://www.w3.org/2000/svg",
   };
-
   const iconCls = dark ? "text-white/40" : "text-slate-500";
 
   if (loading) {
@@ -968,20 +965,11 @@ const isGeneratingManus =
         <div className="flex flex-col items-center gap-2">
           <div className="flex gap-1.5">
             {Array.from({ length: 6 }).map((_, i) => (
-              <div
-                key={i}
-                className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${
-                  i < 5 ? "bg-blue-500" : dark ? "bg-white/10" : "bg-black/10"
-                }`}
-              />
+              <div key={i} className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${i < 5 ? "bg-blue-500" : dark ? "bg-white/10" : "bg-black/10"}`} />
             ))}
           </div>
-          <p className={`text-[13px] font-medium ${dark ? "text-white/60" : "text-black/50"}`}>
-            Loading performance data...
-          </p>
-          <p className={`text-[11px] ${dark ? "text-white/25" : "text-black/25"}`}>
-            Fetching Meta Ads metrics
-          </p>
+          <p className={`text-[13px] font-medium ${dark ? "text-white/60" : "text-black/50"}`}>Loading performance data...</p>
+          <p className={`text-[11px] ${dark ? "text-white/25" : "text-black/25"}`}>Fetching Meta Ads metrics</p>
         </div>
       </div>
     );
@@ -991,31 +979,14 @@ const isGeneratingManus =
     return (
       <div className="flex flex-col items-center gap-4 py-16">
         <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            className="text-red-400"
-          >
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-red-400">
             <circle cx="12" cy="12" r="10" />
             <line x1="12" y1="8" x2="12" y2="12" />
             <line x1="12" y1="16" x2="12.01" y2="16" />
           </svg>
           <p className="text-[13px] text-red-400">{error}</p>
         </div>
-
-        <button
-          onClick={onBack}
-          className={`text-[12px] px-4 py-2 rounded-lg border transition-all ${
-            dark
-              ? "border-white/10 text-white/40 hover:text-white/80"
-              : "border-black/10 text-black/40 hover:text-black/70"
-          }`}
-        >
+        <button onClick={onBack} className={`text-[12px] px-4 py-2 rounded-lg border transition-all ${dark ? "border-white/10 text-white/40 hover:text-white/80" : "border-black/10 text-black/40 hover:text-black/70"}`}>
           ← Back
         </button>
       </div>
@@ -1024,6 +995,7 @@ const isGeneratingManus =
 
   return (
     <div className="w-full max-w-[1300px] mx-auto flex flex-col gap-6 pb-16">
+      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <button
           onClick={onBack}
@@ -1046,17 +1018,9 @@ const isGeneratingManus =
 
         <div className="flex items-center gap-2">
           <button
-            onClick={() => {
-              setExportingCSV(true);
-              exportCSV(filteredAds, client, from, to);
-              setExportingCSV(false);
-            }}
+            onClick={() => { setExportingCSV(true); exportCSV(filteredAds, client, from, to); setExportingCSV(false); }}
             disabled={exportingCSV}
-            className={`flex items-center gap-1.5 text-[12px] px-3 py-1.5 rounded-lg border font-medium transition-all disabled:opacity-40 ${
-              dark
-                ? "border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
-                : "border-emerald-600/30 text-emerald-700 hover:bg-emerald-50"
-            }`}
+            className={`flex items-center gap-1.5 text-[12px] px-3 py-1.5 rounded-lg border font-medium transition-all disabled:opacity-40 ${dark ? "border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10" : "border-emerald-600/30 text-emerald-700 hover:bg-emerald-50"}`}
           >
             <svg {...iconProps} className={dark ? "text-emerald-400" : "text-emerald-700"}>
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -1066,17 +1030,9 @@ const isGeneratingManus =
           </button>
 
           <button
-            onClick={async () => {
-              setExportingPDF(true);
-              await exportPDF(filteredAds, campaigns, summary, client, from, to);
-              setExportingPDF(false);
-            }}
+            onClick={async () => { setExportingPDF(true); await exportPDF(filteredAds, campaigns, summary, client, from, to); setExportingPDF(false); }}
             disabled={exportingPDF}
-            className={`flex items-center gap-1.5 text-[12px] px-3 py-1.5 rounded-lg border font-medium transition-all disabled:opacity-40 ${
-              dark
-                ? "border-blue-500/30 text-blue-400 hover:bg-blue-500/10"
-                : "border-blue-600/30 text-blue-700 hover:bg-blue-50"
-            }`}
+            className={`flex items-center gap-1.5 text-[12px] px-3 py-1.5 rounded-lg border font-medium transition-all disabled:opacity-40 ${dark ? "border-blue-500/30 text-blue-400 hover:bg-blue-500/10" : "border-blue-600/30 text-blue-700 hover:bg-blue-50"}`}
           >
             {exportingPDF ? (
               <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -1093,143 +1049,123 @@ const isGeneratingManus =
           </button>
 
           <button
-  onClick={() =>
-    generateReport({ type: "Performance Report", client, from, to })
-  }
-  disabled={isGeneratingManus}
-  className={`flex items-center gap-1.5 text-[12px] px-3 py-1.5 rounded-lg border font-medium transition-all disabled:opacity-40 ${
-    dark
-      ? "border-fuchsia-500/30 text-fuchsia-400 hover:bg-fuchsia-500/10"
-      : "border-fuchsia-600/30 text-fuchsia-700 hover:bg-fuchsia-50"
-  }`}
->
-  {isGeneratingManus ? (
-    <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-    </svg>
-  ) : (
-    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M12 3l2.5 5 5.5.8-4 3.9.9 5.5-4.9-2.6-4.9 2.6.9-5.5-4-3.9 5.5-.8L12 3z" />
-    </svg>
-  )}
-  {isGeneratingManus
-    ? manusState.brief || "Generating…"
-    : "ManusAI Report PDF"}
-</button>
-
+            onClick={async () => {
+              const payload = buildReportPayload(allAds, campaigns, client, from, to);
+              generateReport(payload);
+            }}
+            disabled={isGeneratingManus}
+            className={`flex items-center gap-1.5 text-[12px] px-3 py-1.5 rounded-lg border font-medium transition-all disabled:opacity-40 ${
+              dark
+                ? "border-fuchsia-500/30 text-fuchsia-400 hover:bg-fuchsia-500/10"
+                : "border-fuchsia-600/30 text-fuchsia-700 hover:bg-fuchsia-50"
+            }`}
+          >
+            {isGeneratingManus ? (
+              <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+              </svg>
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 3l2.5 5 5.5.8-4 3.9.9 5.5-4.9-2.6-4.9 2.6.9-5.5-4-3.9 5.5-.8L12 3z" />
+              </svg>
+            )}
+            {isGeneratingManus ? manusState.brief || "Analyzing…" : "Deep Report PDF"}
+          </button>
         </div>
       </div>
 
-
+      {/* Summary Cards — Row 1 */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+        <SummaryCard label="Total Spend" value={fmtMoney(totalSpend)} sub={`${allAds.length} ads total`} dark={dark}
+          icon={<svg {...iconProps} className={iconCls}><line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>}
+        />
+        <SummaryCard label="Total Reach" value={fmt(totalReach)} dark={dark}
+          icon={<svg {...iconProps} className={iconCls}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>}
+        />
+        <SummaryCard label="Impressions" value={fmt(totalImpressions)} dark={dark}
+          icon={<svg {...iconProps} className={iconCls}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>}
+        />
+        <SummaryCard label="Clicks" value={fmt(totalClicks)} dark={dark}
+          icon={<svg {...iconProps} className={iconCls}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg>}
+        />
+        <SummaryCard label="CTR" value={fmtPct(overallCTR)}
+          accent={overallCTR >= 1.5 ? (dark ? "text-emerald-400" : "text-emerald-600") : overallCTR < 0.8 ? (dark ? "text-red-400" : "text-red-600") : (dark ? "text-yellow-400" : "text-yellow-600")}
+          dark={dark}
+          icon={<svg {...iconProps} className={iconCls}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></svg>}
+        />
+        <SummaryCard label="CPM" value={fmtMoney(overallCPM)} dark={dark}
+          icon={<svg {...iconProps} className={iconCls}><rect x="1" y="4" width="22" height="16" rx="2" ry="2" /><line x1="1" y1="10" x2="23" y2="10" /></svg>}
+        />
+        <SummaryCard label="CPC" value={overallCPC > 0 ? fmtMoney(overallCPC) : "—"} dark={dark}
+          icon={<svg {...iconProps} className={iconCls}><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="16" /><line x1="8" y1="12" x2="16" y2="12" /></svg>}
+        />
+        <SummaryCard label="Active Ads" value={String(activeAds)} sub={`of ${allAds.length} total`} accent={dark ? "text-blue-400" : "text-blue-600"} dark={dark}
+          icon={<svg {...iconProps} className={iconCls}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg>}
+        />
+      </div>
+
+      {/* Summary Cards — Row 2: Leads */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         <SummaryCard
-          label="Total Spend"
-          value={fmtMoney(totalSpend)}
-          sub={`${allAds.length} ads total`}
+          label="Total Leads"
+          value={totalLeads > 0 ? fmt(totalLeads) : "—"}
+          sub="across all ads"
+          accent={dark ? "text-emerald-400" : "text-emerald-600"}
           dark={dark}
           icon={
-            <svg {...iconProps} className={iconCls}>
+            <svg {...iconProps} className={dark ? "text-emerald-400" : "text-emerald-600"}>
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </svg>
+          }
+        />
+        <SummaryCard
+          label="Cost Per Lead"
+          value={overallCPL > 0 ? fmtMoney(overallCPL) : "—"}
+          sub={totalLeads > 0 ? `from ${fmt(totalLeads)} leads` : "no leads yet"}
+          accent={
+            overallCPL > 0
+              ? overallCPL < 100
+                ? dark ? "text-emerald-400" : "text-emerald-600"
+                : overallCPL < 300
+                  ? dark ? "text-yellow-400" : "text-yellow-600"
+                  : dark ? "text-red-400" : "text-red-600"
+              : undefined
+          }
+          dark={dark}
+          icon={
+            <svg {...iconProps} className={dark ? "text-emerald-400" : "text-emerald-600"}>
               <line x1="12" y1="1" x2="12" y2="23" />
               <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
             </svg>
           }
         />
         <SummaryCard
-          label="Total Reach"
-          value={fmt(totalReach)}
+          label="Landing Page Views"
+          value={totalLandingPageViews > 0 ? fmt(totalLandingPageViews) : "—"}
           dark={dark}
           icon={
             <svg {...iconProps} className={iconCls}>
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-              <circle cx="9" cy="7" r="4" />
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+              <polyline points="15 3 21 3 21 9" />
+              <line x1="10" y1="14" x2="21" y2="3" />
             </svg>
           }
         />
         <SummaryCard
-          label="Impressions"
-          value={fmt(totalImpressions)}
+          label="Post Engagements"
+          value={totalPostEngagements > 0 ? fmt(totalPostEngagements) : "—"}
           dark={dark}
           icon={
             <svg {...iconProps} className={iconCls}>
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-              <circle cx="12" cy="12" r="3" />
-            </svg>
-          }
-        />
-        <SummaryCard
-          label="Clicks"
-          value={fmt(totalClicks)}
-          dark={dark}
-          icon={
-            <svg {...iconProps} className={iconCls}>
-              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-            </svg>
-          }
-        />
-        <SummaryCard
-          label="CTR"
-          value={fmtPct(overallCTR)}
-          accent={
-            overallCTR >= 1.5
-              ? dark
-                ? "text-emerald-400"
-                : "text-emerald-600"
-              : overallCTR < 0.8
-                ? dark
-                  ? "text-red-400"
-                  : "text-red-600"
-                : dark
-                  ? "text-yellow-400"
-                  : "text-yellow-600"
-          }
-          dark={dark}
-          icon={
-            <svg {...iconProps} className={iconCls}>
-              <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
-              <polyline points="17 6 23 6 23 12" />
-            </svg>
-          }
-        />
-        <SummaryCard
-          label="CPM"
-          value={fmtMoney(overallCPM)}
-          dark={dark}
-          icon={
-            <svg {...iconProps} className={iconCls}>
-              <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
-              <line x1="1" y1="10" x2="23" y2="10" />
-            </svg>
-          }
-        />
-        <SummaryCard
-          label="CPC"
-          value={overallCPC > 0 ? fmtMoney(overallCPC) : "—"}
-          dark={dark}
-          icon={
-            <svg {...iconProps} className={iconCls}>
-              <circle cx="12" cy="12" r="10" />
-              <line x1="12" y1="8" x2="12" y2="16" />
-              <line x1="8" y1="12" x2="16" y2="12" />
-            </svg>
-          }
-        />
-        <SummaryCard
-          label="Active Ads"
-          value={String(activeAds)}
-          sub={`of ${allAds.length} total`}
-          accent={dark ? "text-blue-400" : "text-blue-600"}
-          dark={dark}
-          icon={
-            <svg {...iconProps} className={iconCls}>
-              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
             </svg>
           }
         />
       </div>
 
+      {/* Engagement totals bar */}
       <div
         className={`rounded-xl border px-4 py-3 flex items-center gap-6 flex-wrap ${
           dark
@@ -1245,38 +1181,33 @@ const isGeneratingManus =
           { label: "Comments", value: fmt(totalComments) },
           { label: "Shares", value: fmt(totalShares) },
           { label: "Video Views", value: fmt(totalVideoViews) },
+          { label: "Leads", value: totalLeads > 0 ? fmt(totalLeads) : "—", accent: true },
           { label: "Campaigns", value: String(campaigns.length) },
           { label: "Ad Sets", value: String(campaigns.reduce((s, c) => s + c.adSets.length, 0)) },
-        ].map((item, i) => (
+        ].map((item, i, arr) => (
           <div key={i} className="flex items-center gap-2">
-            <div className={`flex flex-col ${dark ? "text-white" : "text-slate-900"}`}>
+            <div className="flex flex-col">
               <span className={`text-[10px] ${dark ? "text-white/25" : "text-slate-400"}`}>{item.label}</span>
-              <span className="text-[15px] font-bold tabular-nums">{item.value}</span>
+              <span className={`text-[15px] font-bold tabular-nums ${
+                (item as any).accent
+                  ? dark ? "text-emerald-400" : "text-emerald-600"
+                  : dark ? "text-white" : "text-slate-900"
+              }`}>{item.value}</span>
             </div>
-            {i < 5 && <div className={`w-px h-5 ${dark ? "bg-white/[0.06]" : "bg-black/10"}`} />}
+            {i < arr.length - 1 && <div className={`w-px h-5 ${dark ? "bg-white/[0.06]" : "bg-black/10"}`} />}
           </div>
         ))}
       </div>
 
       <div className={`h-px w-full ${dark ? "bg-white/[0.05]" : "bg-black/[0.05]"}`} />
 
+      {/* Filters & controls */}
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[200px]">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              className={`absolute left-3.5 top-1/2 -translate-y-1/2 ${dark ? "text-white/25" : "text-black/25"}`}
-            >
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`absolute left-3.5 top-1/2 -translate-y-1/2 ${dark ? "text-white/25" : "text-black/25"}`}>
+              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
-
             <input
               type="text"
               value={search}
@@ -1297,16 +1228,8 @@ const isGeneratingManus =
                 onClick={() => setStatusFilter(s)}
                 className={`px-3 py-1.5 rounded-lg text-[10px] font-bold tracking-widest uppercase transition-all ${
                   statusFilter === s
-                    ? s === "ACTIVE"
-                      ? "bg-emerald-600 text-white"
-                      : s === "PAUSED"
-                        ? "bg-yellow-600 text-white"
-                        : s === "ARCHIVED"
-                          ? "bg-slate-600 text-white"
-                          : "bg-blue-600 text-white"
-                    : dark
-                      ? "text-white/30 hover:text-white/60"
-                      : "text-black/30 hover:text-black/60"
+                    ? s === "ACTIVE" ? "bg-emerald-600 text-white" : s === "PAUSED" ? "bg-yellow-600 text-white" : s === "ARCHIVED" ? "bg-slate-600 text-white" : "bg-blue-600 text-white"
+                    : dark ? "text-white/30 hover:text-white/60" : "text-black/30 hover:text-black/60"
                 }`}
               >
                 {s}
@@ -1317,40 +1240,21 @@ const isGeneratingManus =
           <div className={`flex rounded-xl p-1 gap-1 ${dark ? "bg-white/[0.03] border border-white/[0.06]" : "bg-black/[0.03] border border-black/[0.06]"}`}>
             <button
               onClick={() => setViewMode("flat")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
-                viewMode === "flat"
-                  ? "bg-blue-600 text-white"
-                  : dark
-                    ? "text-white/35 hover:text-white/60"
-                    : "text-black/35 hover:text-black/60"
-              }`}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${viewMode === "flat" ? "bg-blue-600 text-white" : dark ? "text-white/35 hover:text-white/60" : "text-black/35 hover:text-black/60"}`}
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="8" y1="6" x2="21" y2="6" />
-                <line x1="8" y1="12" x2="21" y2="12" />
-                <line x1="8" y1="18" x2="21" y2="18" />
-                <line x1="3" y1="6" x2="3.01" y2="6" />
-                <line x1="3" y1="12" x2="3.01" y2="12" />
-                <line x1="3" y1="18" x2="3.01" y2="18" />
+                <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" />
+                <line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
               </svg>
               Flat Table
             </button>
-
             <button
               onClick={() => setViewMode("grouped")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
-                viewMode === "grouped"
-                  ? "bg-blue-600 text-white"
-                  : dark
-                    ? "text-white/35 hover:text-white/60"
-                    : "text-black/35 hover:text-black/60"
-              }`}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${viewMode === "grouped" ? "bg-blue-600 text-white" : dark ? "text-white/35 hover:text-white/60" : "text-black/35 hover:text-black/60"}`}
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="3" y="3" width="7" height="7" />
-                <rect x="14" y="3" width="7" height="7" />
-                <rect x="14" y="14" width="7" height="7" />
-                <rect x="3" y="14" width="7" height="7" />
+                <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
+                <rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
               </svg>
               Grouped
             </button>
@@ -1364,27 +1268,33 @@ const isGeneratingManus =
               { key: "reach", label: "Top Reach" },
               { key: "impressions", label: "Top Impressions" },
               { key: "clicks", label: "Top Clicks" },
+              { key: "leads", label: "Top Leads", accent: true },
               { key: "ctr", label: "Best CTR" },
               { key: "ctr", label: "Worst CTR", dir: "asc" },
+              { key: "cpl", label: "Lowest CPL", dir: "asc", accent: true },
               { key: "cpm", label: "Lowest CPM", dir: "asc" },
               { key: "cpc", label: "Lowest CPC", dir: "asc" },
               { key: "likes", label: "Top Likes" },
               { key: "videoViews", label: "Top Views" },
-            ] as { key: SortKey; label: string; dir?: SortDir }[]).map((s, i) => {
+              { key: "landingPageViews", label: "Top LP Views" },
+            ] as { key: SortKey; label: string; dir?: SortDir; accent?: boolean }[]).map((s, i) => {
               const isActive = sortKey === s.key && sortDir === (s.dir || "desc");
               return (
                 <button
                   key={i}
-                  onClick={() => {
-                    setSortKey(s.key);
-                    setSortDir(s.dir || "desc");
-                  }}
+                  onClick={() => { setSortKey(s.key); setSortDir(s.dir || "desc"); }}
                   className={`px-3 py-1.5 rounded-lg text-[10px] font-bold tracking-wide uppercase transition-all ${
                     isActive
-                      ? "bg-blue-600 text-white shadow-[0_2px_10px_rgba(59,130,246,0.3)]"
-                      : dark
-                        ? "bg-white/[0.04] text-white/30 hover:text-white/60 border border-white/[0.06]"
-                        : "bg-black/[0.04] text-black/30 hover:text-black/60 border border-black/[0.06]"
+                      ? s.accent
+                        ? "bg-emerald-600 text-white shadow-[0_2px_10px_rgba(16,185,129,0.3)]"
+                        : "bg-blue-600 text-white shadow-[0_2px_10px_rgba(59,130,246,0.3)]"
+                      : s.accent
+                        ? dark
+                          ? "bg-emerald-500/[0.08] text-emerald-400/70 hover:text-emerald-400 border border-emerald-500/20"
+                          : "bg-emerald-50 text-emerald-600/70 hover:text-emerald-600 border border-emerald-200"
+                        : dark
+                          ? "bg-white/[0.04] text-white/30 hover:text-white/60 border border-white/[0.06]"
+                          : "bg-black/[0.04] text-black/30 hover:text-black/60 border border-black/[0.06]"
                   }`}
                 >
                   {s.label}
@@ -1402,39 +1312,21 @@ const isGeneratingManus =
       </div>
 
       {viewMode === "flat" ? (
-        <FlatTable
-          ads={filteredAds}
-          sortKey={sortKey}
-          sortDir={sortDir}
-          onSort={handleSort}
-          dark={dark}
-          onRowClick={(ad) => setSelectedAd(ad)}
-        />
+        <FlatTable ads={filteredAds} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} dark={dark} onRowClick={(ad) => setSelectedAd(ad)} />
       ) : (
         <GroupedView campaigns={campaigns} dark={dark} onAdClick={(ad) => setSelectedAd(ad)} />
       )}
 
       {allAds.length === 0 && (
         <div className="flex flex-col items-center gap-3 py-16">
-          <p className={`text-[13px] ${dark ? "text-white/30" : "text-slate-400"}`}>
-            No ads found for this period.
-          </p>
+          <p className={`text-[13px] ${dark ? "text-white/30" : "text-slate-400"}`}>No ads found for this period.</p>
         </div>
       )}
 
       {selectedAd && (
-        <AdModal
-          ad={selectedAd}
-          onClose={() => setSelectedAd(null)}
-          dark={dark}
-          token={cfgToken}
-        />
+        <AdModal ad={selectedAd} onClose={() => setSelectedAd(null)} dark={dark} token={cfgToken} />
       )}
-      <ManusReportToast
-  state={manusState}
-  onDismiss={dismissManus}
-  dark={dark}
-/>
+      <ManusReportToast state={manusState} onDismiss={dismissManus} dark={dark} />
     </div>
   );
 }

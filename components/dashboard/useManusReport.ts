@@ -1,40 +1,58 @@
-
 "use client";
+// components/dashboard/useManusReport.ts
 
 import { useState, useRef, useCallback } from "react";
+import type { ReportPayload } from "@/lib/buildReportPayload";
 
 export type ManusReportStatus =
   | "idle"
   | "creating"
   | "running"
   | "waiting"
-  | "done"
+  | "done"        // JSON analysis done, now building HTML
+  | "building"    // Second Manus task: generating HTML report
   | "error";
 
 export interface ManusReportState {
   status: ManusReportStatus;
   brief: string;
-  pdfUrl: string | null;
-  pdfFilename: string | null;
+  reportData: any | null;
   taskUrl: string | null;
   error: string | null;
 }
 
 const POLL_INTERVAL_MS = 5000;
-const MAX_POLLS = 180; // 15 minutes max
+const MAX_POLLS = 180;
+
+async function safeFetch(
+  url: string,
+  options?: RequestInit
+): Promise<{ ok: boolean; status: number; data: any }> {
+  try {
+    const res  = await fetch(url, options);
+    const text = await res.text();
+    let data: any = {};
+    if (text && text.trim() !== "") {
+      try { data = JSON.parse(text); }
+      catch { data = { error: `Non-JSON (${res.status}): ${text.slice(0, 200)}` }; }
+    }
+    return { ok: res.ok, status: res.status, data };
+  } catch (err: any) {
+    return { ok: false, status: 0, data: { error: err?.message ?? "Network error" } };
+  }
+}
 
 export function useManusReport() {
   const [state, setState] = useState<ManusReportState>({
     status: "idle",
     brief: "",
-    pdfUrl: null,
-    pdfFilename: null,
+    reportData: null,
     taskUrl: null,
     error: null,
   });
 
-  const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const pollCountRef = useRef(0);
+  const pollTimerRef  = useRef<NodeJS.Timeout | null>(null);
+  const pollCountRef  = useRef(0);
 
   const stopPolling = useCallback(() => {
     if (pollTimerRef.current) {
@@ -49,142 +67,101 @@ export function useManusReport() {
 
       if (pollCountRef.current > MAX_POLLS) {
         stopPolling();
-        setState((s) => ({
-          ...s,
-          status: "error",
-          error: "Report timed out after 15 minutes. Check Manus for results.",
-        }));
+        setState((s) => ({ ...s, status: "error", error: "Report timed out after 15 minutes." }));
         return;
       }
 
-      try {
-        const res = await fetch(`/api/manus-poll?task_id=${taskId}`);
-        const data = await res.json();
+      const { ok, data } = await safeFetch(
+        `/api/manus-poll?task_id=${encodeURIComponent(taskId)}`
+      );
 
-        if (!res.ok) {
-          stopPolling();
-          setState((s) => ({
-            ...s,
-            status: "error",
-            error: data.error ?? "Polling failed",
-          }));
-          return;
-        }
-
-        if (data.status === "stopped") {
-          stopPolling();
-          setState({
-            status: "done",
-            brief: "Report ready!",
-            pdfUrl: data.pdfUrl ?? null,
-            pdfFilename: data.pdfFilename ?? "report.pdf",
-            taskUrl: data.taskUrl ?? null,
-            error: null,
-          });
-          return;
-        }
-
-        if (data.status === "error") {
-          stopPolling();
-          setState((s) => ({
-            ...s,
-            status: "error",
-            error: data.error ?? "Manus task failed",
-          }));
-          return;
-        }
-
-        // running or waiting — update brief and keep polling
-        setState((s) => ({
-          ...s,
-          status: data.status === "waiting" ? "waiting" : "running",
-          brief: data.brief ?? s.brief,
-        }));
-
-        pollTimerRef.current = setTimeout(() => poll(taskId), POLL_INTERVAL_MS);
-      } catch (err: any) {
+      if (!ok) {
         stopPolling();
-        setState((s) => ({
-          ...s,
-          status: "error",
-          error: err.message ?? "Network error during polling",
-        }));
+        setState((s) => ({ ...s, status: "error", error: data?.error ?? "Polling failed" }));
+        return;
       }
+
+      const status: string = data?.status ?? "running";
+
+      if (status === "stopped") {
+        stopPolling();
+        setState({
+          status: "done",
+          brief: "Deep analysis complete — now building HTML report with Manus…",
+          reportData: data.reportData ?? null,
+          taskUrl: data.taskUrl ?? null,
+          error: null,
+        });
+        return;
+      }
+
+      if (status === "error") {
+        stopPolling();
+        setState((s) => ({ ...s, status: "error", error: data?.error ?? "Manus task failed" }));
+        return;
+      }
+
+      setState((s) => ({
+        ...s,
+        status: status === "waiting" ? "waiting" : "running",
+        brief: data?.brief ?? s.brief,
+        taskUrl: data?.taskUrl ?? s.taskUrl,
+      }));
+
+      pollTimerRef.current = setTimeout(() => poll(taskId), POLL_INTERVAL_MS);
     },
     [stopPolling]
   );
 
   const generateReport = useCallback(
-    async (params: {
-      type: string;
-      client: string;
-      from: string;
-      to: string;
-    }) => {
+    async (payload: ReportPayload) => {
       stopPolling();
       pollCountRef.current = 0;
 
       setState({
         status: "creating",
-        brief: "Creating report task…",
-        pdfUrl: null,
-        pdfFilename: null,
+        brief: "Submitting to Manus for deep analysis…",
+        reportData: null,
         taskUrl: null,
         error: null,
       });
 
-      try {
-        const res = await fetch("/api/manus-report", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(params),
-        });
+      const { ok, data } = await safeFetch("/api/manus-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ payload }),
+      });
 
-        const data = await res.json();
-
-        if (!res.ok || !data.taskId) {
-          setState((s) => ({
-            ...s,
-            status: "error",
-            error: data.error ?? "Failed to create report task",
-          }));
-          return;
-        }
-
-        setState((s) => ({
-          ...s,
-          status: "running",
-          brief: "Manus is fetching your ad data…",
-          taskUrl: data.taskUrl ?? null,
-        }));
-
-        // Start polling
-        pollTimerRef.current = setTimeout(
-          () => poll(data.taskId),
-          POLL_INTERVAL_MS
-        );
-      } catch (err: any) {
+      if (!ok || !data?.taskId) {
         setState((s) => ({
           ...s,
           status: "error",
-          error: err.message ?? "Failed to start report",
+          error: data?.error ?? "Failed to create Manus task",
         }));
+        return;
       }
+
+      setState((s) => ({
+        ...s,
+        status: "running",
+        brief: "Manus AI is performing deep analysis of your ads data…",
+        taskUrl: data.taskUrl ?? null,
+      }));
+
+      pollTimerRef.current = setTimeout(() => poll(data.taskId), POLL_INTERVAL_MS);
     },
     [poll, stopPolling]
   );
 
+  // Call this to update brief during second stage (HTML building)
+  const setBuilding = useCallback((brief: string) => {
+    setState((s) => ({ ...s, status: "building", brief }));
+  }, []);
+
   const dismiss = useCallback(() => {
     stopPolling();
-    setState({
-      status: "idle",
-      brief: "",
-      pdfUrl: null,
-      pdfFilename: null,
-      taskUrl: null,
-      error: null,
-    });
+    setState({ status: "idle", brief: "", reportData: null, taskUrl: null, error: null });
   }, [stopPolling]);
 
-  return { state, generateReport, dismiss };
+  return { state, generateReport, setBuilding, dismiss };
 }

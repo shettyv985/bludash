@@ -24,9 +24,7 @@ function safeFilename(value: string) {
 
 function extractTextFromContent(content: any): string {
   if (!content) return "";
-
   if (typeof content === "string") return content;
-
   if (Array.isArray(content)) {
     return content
       .map((part) => {
@@ -38,59 +36,44 @@ function extractTextFromContent(content: any): string {
       .join("\n")
       .trim();
   }
-
   if (content?.text) return content.text;
   return "";
 }
 
 function extractAssistantText(events: any[]): string {
-  const assistantEvents = events.filter((event) => event?.type === "assistant_message");
-
-  for (let i = assistantEvents.length - 1; i >= 0; i -= 1) {
+  const assistantEvents = events.filter((e) => e?.type === "assistant_message");
+  for (let i = assistantEvents.length - 1; i >= 0; i--) {
     const event = assistantEvents[i];
     const text =
       extractTextFromContent(event?.assistant_message?.content) ||
       extractTextFromContent(event?.content) ||
       extractTextFromContent(event?.message?.content);
-
     if (text.trim()) return text.trim();
   }
-
   return "";
 }
 
 function getLatestStatus(events: any[]): string {
-  const statusEvents = events.filter((event) => event?.type === "status_update");
+  const statusEvents = events.filter((e) => e?.type === "status_update");
   const latest = statusEvents[statusEvents.length - 1];
   return latest?.status_update?.agent_status || "";
 }
 
 function getInstantReply(userText: string): string | null {
   const text = userText.trim().toLowerCase();
-
   if (!text) return "Ask me anything about this report.";
-
-  if (
-    /^(hi|hello|hey|yo)\b/.test(text) ||
-    /\bhow are you\b/.test(text)
-  ) {
-    return "I’m Bludash AI Analyst. Ask me about this report and I’ll break it down for you.";
-  }
-
+  if (/^(hi|hello|hey|yo)\b/.test(text) || /\bhow are you\b/.test(text))
+    return "I'm Bludash AI Analyst. Ask me about this report and I'll break it down for you.";
   if (
     /\bwhich model are you\b/.test(text) ||
     /\bwhat model are you\b/.test(text) ||
     /\bwho are you\b/.test(text) ||
     /\bwhat are you\b/.test(text) ||
     /\bare you ai\b/.test(text)
-  ) {
-    return "I’m Bludash AI Analyst. For report questions, I use Manus-powered analysis behind the scenes.";
-  }
-
-  if (/\bthank(s| you)?\b/.test(text)) {
-    return "Anytime. Ask the next one whenever you’re ready.";
-  }
-
+  )
+    return "I'm Bludash AI Analyst, powered by Manus AI behind the scenes.";
+  if (/\bthank(s| you)?\b/.test(text))
+    return "Anytime. Ask the next one whenever you're ready.";
   return null;
 }
 
@@ -112,21 +95,23 @@ async function uploadTextFile(
   const createFileData = await createFileRes.json();
 
   if (!createFileRes.ok) {
-    throw new Error(createFileData?.error?.message || createFileData?.message || "Failed to create Manus file");
+    throw new Error(
+      createFileData?.error?.message ||
+        createFileData?.message ||
+        "Failed to create Manus file"
+    );
   }
 
   const uploadUrl = createFileData?.upload_url;
   const fileId = createFileData?.file?.id;
 
   if (!uploadUrl || !fileId) {
-    throw new Error("Manus file upload URL was missing");
+    throw new Error("Manus file upload URL or file ID was missing");
   }
 
   const uploadRes = await fetch(uploadUrl, {
     method: "PUT",
-    headers: {
-      "Content-Type": contentType,
-    },
+    headers: { "Content-Type": contentType },
     body: content,
   });
 
@@ -137,7 +122,12 @@ async function uploadTextFile(
   return { fileId };
 }
 
-function buildSocialReportAttachment(reportData: any, client: string, from: string, to: string) {
+function buildSocialReportAttachment(
+  reportData: any,
+  client: string,
+  from: string,
+  to: string
+) {
   const fbPosts = Array.isArray(reportData?.fbPosts) ? reportData.fbPosts : [];
   const igPosts = Array.isArray(reportData?.igPosts) ? reportData.igPosts : [];
   const fbSummary = reportData?.summary?.facebook || {};
@@ -145,9 +135,10 @@ function buildSocialReportAttachment(reportData: any, client: string, from: stri
 
   const lines: string[] = [];
 
-  lines.push(`# Bludash Social Media Context`);
+  lines.push(`# Bludash Social Media Performance Report`);
   lines.push(`Client: ${client}`);
   lines.push(`Date Range: ${from} to ${to}`);
+  lines.push(`Generated: ${new Date().toISOString()}`);
   lines.push(``);
 
   lines.push(`## Facebook Summary`);
@@ -180,36 +171,34 @@ function buildSocialReportAttachment(reportData: any, client: string, from: stri
   lines.push(`- Profile Views: ${igSummary.profileViews ?? 0}`);
   lines.push(``);
 
-  lines.push(`## Facebook Posts`);
+  lines.push(`## Facebook Posts (${fbPosts.length} total)`);
   if (fbPosts.length === 0) {
     lines.push(`No Facebook posts in this period.`);
   } else {
     fbPosts.forEach((post: any, index: number) => {
       lines.push(
-        `${index + 1}. ${safeText(post.type)} | ${safeText(post.createdTime)} | Reach: ${post.reach ?? 0} | Likes: ${post.likes ?? 0} | Comments: ${post.comments ?? 0} | Shares: ${post.shares ?? 0} | ER: ${safeText(post.engagementRate)}% | Caption: ${safeText(post.message) || "No caption"}`
+        `${index + 1}. [${safeText(post.type)}] ${safeText(post.createdTime)} | Reach: ${post.reach ?? 0} | Likes: ${post.likes ?? 0} | Comments: ${post.comments ?? 0} | Shares: ${post.shares ?? 0} | ER: ${safeText(post.engagementRate)}% | Caption: "${safeText(post.message) || "No caption"}"`
       );
-
       if (post?.boosted) {
         lines.push(
-          `   Boosted: Yes | Spend: Rs ${post.boosted.amountSpent ?? "0"} | Paid Reach: ${post.boosted.paidReach ?? 0} | Impressions: ${post.boosted.impressions ?? 0} | Clicks: ${post.boosted.clicks ?? 0} | CPM: ${post.boosted.cpm ?? "0"} | CTR: ${post.boosted.ctr ?? "0"}`
+          `   → BOOSTED: Spend ₹${post.boosted.amountSpent ?? "0"} | Paid Reach: ${post.boosted.paidReach ?? 0} | Impressions: ${post.boosted.impressions ?? 0} | Clicks: ${post.boosted.clicks ?? 0} | CPM: ₹${post.boosted.cpm ?? "0"} | CTR: ${post.boosted.ctr ?? "0"}%`
         );
       }
     });
   }
 
   lines.push(``);
-  lines.push(`## Instagram Posts`);
+  lines.push(`## Instagram Posts (${igPosts.length} total)`);
   if (igPosts.length === 0) {
     lines.push(`No Instagram posts in this period.`);
   } else {
     igPosts.forEach((post: any, index: number) => {
       lines.push(
-        `${index + 1}. ${safeText(post.type)} | ${safeText(post.createdTime)} | Reach: ${post.reach ?? 0} | Likes: ${post.likes ?? 0} | Comments: ${post.comments ?? 0} | Shares: ${post.shares ?? 0} | Saves: ${post.saves ?? 0} | ER: ${safeText(post.engagementRate)}% | Avg Watch Time: ${post.avgWatchTime ?? 0}s | Caption: ${safeText(post.message) || "No caption"}`
+        `${index + 1}. [${safeText(post.type)}] ${safeText(post.createdTime)} | Reach: ${post.reach ?? 0} | Likes: ${post.likes ?? 0} | Comments: ${post.comments ?? 0} | Shares: ${post.shares ?? 0} | Saves: ${post.saves ?? 0} | ER: ${safeText(post.engagementRate)}% | Avg Watch Time: ${post.avgWatchTime ?? 0}s | Caption: "${safeText(post.message) || "No caption"}"`
       );
-
       if (post?.boosted) {
         lines.push(
-          `   Boosted: Yes | Spend: Rs ${post.boosted.amountSpent ?? "0"} | Paid Reach: ${post.boosted.paidReach ?? 0} | Paid Likes: ${post.boosted.paidLikes ?? 0} | Paid Comments: ${post.boosted.paidComments ?? 0} | Paid Shares: ${post.boosted.paidShares ?? 0} | Impressions: ${post.boosted.impressions ?? 0} | Clicks: ${post.boosted.clicks ?? 0} | CPM: ${post.boosted.cpm ?? "0"} | CTR: ${post.boosted.ctr ?? "0"}`
+          `   → BOOSTED: Spend ₹${post.boosted.amountSpent ?? "0"} | Paid Reach: ${post.boosted.paidReach ?? 0} | Paid Likes: ${post.boosted.paidLikes ?? 0} | Paid Comments: ${post.boosted.paidComments ?? 0} | Impressions: ${post.boosted.impressions ?? 0} | Clicks: ${post.boosted.clicks ?? 0} | CPM: ₹${post.boosted.cpm ?? "0"} | CTR: ${post.boosted.ctr ?? "0"}%`
         );
       }
     });
@@ -227,14 +216,15 @@ export async function POST(req: NextRequest) {
     }
 
     const latestUserMessage =
-      [...messages].reverse().find((msg: ChatMessage) => msg.role === "user")?.content?.trim() || "";
+      [...messages]
+        .reverse()
+        .find((msg: ChatMessage) => msg.role === "user")
+        ?.content?.trim() || "";
 
+    // ── Instant replies for greetings / meta questions ─────────────────────
     const instantReply = getInstantReply(latestUserMessage);
     if (instantReply) {
-      return NextResponse.json({
-        ok: true,
-        content: instantReply,
-      });
+      return NextResponse.json({ ok: true, content: instantReply });
     }
 
     const manusApiKey = process.env.MANUS_API_KEY;
@@ -245,35 +235,54 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // ── Parse connector IDs (optional — only needed for external tool access) ─
     const connectorIds =
-      process.env.MANUS_CONNECTOR_IDS
-        ?.split(",")
+      process.env.MANUS_CONNECTOR_IDS?.split(",")
         .map((id) => id.trim())
         .filter(Boolean) || [];
 
-    const attachmentContent = buildSocialReportAttachment(reportData, client, from, to);
+    // ── Build and upload the context file ─────────────────────────────────
+    const attachmentContent = buildSocialReportAttachment(
+      reportData,
+      client,
+      from,
+      to
+    );
     const filename = `bludash_chat_context_${safeFilename(client)}_${from}_${to}.md`;
 
-    const { fileId } = await uploadTextFile(manusApiKey, filename, attachmentContent);
+    let fileId: string;
+    try {
+      ({ fileId } = await uploadTextFile(manusApiKey, filename, attachmentContent));
+    } catch (uploadErr: any) {
+      console.error("File upload failed:", uploadErr);
+      return NextResponse.json(
+        { error: `Failed to upload context: ${uploadErr.message}` },
+        { status: 500 }
+      );
+    }
 
+    // ── Build the prompt ───────────────────────────────────────────────────
     const prompt = [
-      `You are Bludash AI Analyst inside a reporting dashboard.`,
+      `You are Bludash AI Analyst inside a social media reporting dashboard.`,
       ``,
       `Client: ${client}`,
       `Date range: ${from} to ${to}`,
+      ``,
+      `The attached markdown file contains ALL the performance data for this period.`,
+      `Use ONLY the numbers from that file to answer. Do not browse the web.`,
       ``,
       `User question:`,
       latestUserMessage,
       ``,
       `Instructions:`,
-      `- Answer directly inside the dashboard chat.`,
-      `- If the user asks about performance, use only the attached report context file.`,
-      `- If the user asks a general question, answer naturally and briefly.`,
-      `- Use exact numbers when discussing report performance.`,
-      `- Do not paste or restate the entire source data.`,
-      `- Keep the answer crisp and useful.`,
+      `- Answer directly and concisely.`,
+      `- Always cite exact numbers from the data file.`,
+      `- If comparing posts, name them by caption snippet or post number.`,
+      `- Keep the response under 300 words unless the question requires more.`,
+      `- Do not restate all the data — only what is relevant to the question.`,
     ].join("\n");
 
+    // ── Create Manus task ──────────────────────────────────────────────────
     const createRes = await fetch(`${MANUS_BASE}/task.create`, {
       method: "POST",
       headers: {
@@ -283,18 +292,13 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         message: {
           content: [
-            {
-              type: "text",
-              text: prompt,
-            },
-            {
-              type: "file",
-              file_id: fileId,
-            },
+            { type: "text", text: prompt },
+            { type: "file", file_id: fileId },
           ],
-          connectors: connectorIds,
         },
-        title: `Bludash Chat - ${client} - ${from} to ${to}`,
+        // connectors at TOP LEVEL — this is the fix
+        ...(connectorIds.length > 0 && { connectors: connectorIds }),
+        title: `Bludash Chat — ${client} — ${from} to ${to}`,
         hide_in_task_list: true,
         share_visibility: "private",
         interactive_mode: false,
@@ -305,53 +309,113 @@ export async function POST(req: NextRequest) {
     const createData = await createRes.json();
 
     if (!createRes.ok) {
+      console.error("Manus task.create failed:", createData);
       return NextResponse.json(
         {
-          error: createData?.error?.message || createData?.message || "Failed to create Manus task",
+          error:
+            createData?.error?.message ||
+            createData?.message ||
+            "Failed to create Manus task",
         },
         { status: createRes.status }
       );
     }
 
-    const taskId = createData.task_id;
-    const taskUrl = createData.task_url;
+    const taskId: string = createData.task_id;
+    const taskUrl: string = createData.task_url ?? null;
 
+    if (!taskId) {
+      return NextResponse.json(
+        { error: "Manus did not return a task ID" },
+        { status: 500 }
+      );
+    }
+
+    // ── Poll for completion ────────────────────────────────────────────────
+    // 40 attempts × 3s = up to 2 minutes
     let finalText = "";
     let finalStatus = "";
 
-    for (let attempt = 0; attempt < 16; attempt += 1) {
-      await sleep(1500);
+    for (let attempt = 0; attempt < 40; attempt++) {
+      await sleep(3000);
 
-      const eventsRes = await fetch(
-        `${MANUS_BASE}/task.listMessages?task_id=${encodeURIComponent(taskId)}&order=asc&limit=100`,
-        {
-          headers: {
-            "x-manus-api-key": manusApiKey,
-          },
-        }
-      );
+      let eventsData: any = {};
+      try {
+        const eventsRes = await fetch(
+          `${MANUS_BASE}/task.listMessages?task_id=${encodeURIComponent(taskId)}&order=asc&limit=100`,
+          { headers: { "x-manus-api-key": manusApiKey } }
+        );
+        eventsData = await eventsRes.json();
+      } catch (pollErr) {
+        console.error(`Poll attempt ${attempt + 1} fetch error:`, pollErr);
+        continue;
+      }
 
-      const eventsData = await eventsRes.json();
-      const events = eventsData?.data || eventsData?.messages || [];
-
+      const events: any[] = eventsData?.data || eventsData?.messages || [];
       finalText = extractAssistantText(events);
       finalStatus = getLatestStatus(events);
 
-      if (finalStatus === "stopped" && finalText) {
-        break;
+      // ── Auto-confirm waiting actions ───────────────────────────────────
+      if (finalStatus === "waiting") {
+        const statusEvent = events
+          .filter((e) => e?.type === "status_update")
+          .slice(-1)[0];
+        const waitDetail =
+          statusEvent?.status_update?.status_detail ?? {};
+        const eventType: string =
+          waitDetail.waiting_for_event_type ?? "";
+        const eventId: string =
+          waitDetail.waiting_for_event_id ?? "";
+
+        const autoConfirmTypes = [
+          "mapreduceAction",
+          "connectorOauthExpired",
+          "deployAction",
+          "terminalExecute",
+          "apiHighCreditNotice",
+        ];
+
+        if (autoConfirmTypes.includes(eventType) && eventId) {
+          try {
+            await fetch(`${MANUS_BASE}/task.confirmAction`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "x-manus-api-key": manusApiKey,
+              },
+              body: JSON.stringify({
+                task_id: taskId,
+                event_id: eventId,
+                input:
+                  eventType === "apiHighCreditNotice"
+                    ? { action: "accept" }
+                    : { accept: true },
+              }),
+            });
+          } catch (confirmErr) {
+            console.error("Auto-confirm failed:", confirmErr);
+          }
+        }
+        // keep polling
+        continue;
       }
+
+      if (finalStatus === "stopped" && finalText) break;
 
       if (finalStatus === "error") {
         return NextResponse.json({
           ok: false,
-          content: "Manus task failed while generating the response.",
+          content:
+            "Manus encountered an error while generating the response.",
           taskUrl,
         });
       }
     }
 
+    // ── Return result ──────────────────────────────────────────────────────
     if (!finalText) {
-      finalText = "Manus is still working on this answer. Open the full task if you want to continue there.";
+      finalText =
+        "Manus is still working on this. Open the full task for the complete answer.";
     }
 
     return NextResponse.json({

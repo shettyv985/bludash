@@ -14,6 +14,11 @@ export interface AdInsight {
   comments: number;
   shares: number;
   videoViews: number;
+  leads: number;
+  cpl: number;
+  roas: number;
+  landingPageViews: number;
+  postEngagements: number;
   currency: string;
 }
 
@@ -62,13 +67,21 @@ interface UseAdsPerformanceResult {
 
 function getActionExact(actions: any[], ...types: string[]): number {
   if (!actions) return 0;
-
   for (const type of types) {
     const found = actions.find((a: any) => a.action_type === type);
     if (found) return parseInt(found.value || "0", 10);
   }
-
   return 0;
+}
+
+function sumActions(actions: any[], ...types: string[]): number {
+  if (!actions) return 0;
+  let total = 0;
+  for (const type of types) {
+    const found = actions.find((a: any) => a.action_type === type);
+    if (found) total += parseInt(found.value || "0", 10);
+  }
+  return total;
 }
 
 export function useAdsPerformance(
@@ -138,8 +151,9 @@ export function useAdsPerformance(
 
       const insightsParams = new URLSearchParams({
         fields:
-          "ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,spend,reach,impressions,clicks,actions,account_currency",
+          "ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,spend,reach,impressions,clicks,actions,action_values,account_currency",
         time_range: JSON.stringify({ since: from, until: to }),
+        time_increment: "1",
         level: "ad",
         limit: "500",
         access_token: cfg.token,
@@ -153,11 +167,34 @@ export function useAdsPerformance(
 
       const insMap: Record<string, any> = {};
       for (const ins of allInsights) {
-        if (
-          !insMap[ins.ad_id] ||
-          parseFloat(ins.spend || "0") > parseFloat(insMap[ins.ad_id].spend || "0")
-        ) {
-          insMap[ins.ad_id] = ins;
+        if (!insMap[ins.ad_id]) {
+          insMap[ins.ad_id] = { ...ins };
+        } else {
+          // Aggregate insights for the same ad_id within the time range
+          insMap[ins.ad_id].spend = (parseFloat(insMap[ins.ad_id].spend || "0") + parseFloat(ins.spend || "0")).toString();
+          insMap[ins.ad_id].reach = (parseInt(insMap[ins.ad_id].reach || "0", 10) + parseInt(ins.reach || "0", 10)).toString();
+          insMap[ins.ad_id].impressions = (parseInt(insMap[ins.ad_id].impressions || "0", 10) + parseInt(ins.impressions || "0", 10)).toString();
+          insMap[ins.ad_id].clicks = (parseInt(insMap[ins.ad_id].clicks || "0", 10) + parseInt(ins.clicks || "0", 10)).toString();
+          // Aggregate actions as well
+          if (ins.actions) {
+            if (!insMap[ins.ad_id].actions) {
+              insMap[ins.ad_id].actions = [];
+            }
+            for (const newAction of ins.actions) {
+              const existingAction = insMap[ins.ad_id].actions.find(
+                (a: any) => a.action_type === newAction.action_type
+              );
+              if (existingAction) {
+                existingAction.value = (parseFloat(existingAction.value || "0") + parseFloat(newAction.value || "0")).toString();
+              } else {
+                insMap[ins.ad_id].actions.push({ ...newAction });
+              }
+            }
+          }
+          // Update account_currency if it's not set or different
+          if (!insMap[ins.ad_id].account_currency && ins.account_currency) {
+            insMap[ins.ad_id].account_currency = ins.account_currency;
+          }
         }
       }
 
@@ -212,9 +249,30 @@ export function useAdsPerformance(
           "video_watched"
         );
 
+        // Leads: focus on the primary 'lead' action type to avoid double-counting duplicates
+        // like 'onsite_conversion.lead_grouped' or 'offsite_conversion.fb_pixel_lead'.
+        const leads = getActionExact(
+          ins.actions,
+          "lead"
+        );
+
+        const landingPageViews = getActionExact(
+          ins.actions,
+          "landing_page_view"
+        );
+
+        const postEngagements = getActionExact(
+          ins.actions,
+          "post_engagement"
+        );
+
         const cpm = impressions > 0 ? (spend / impressions) * 1000 : 0;
         const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0;
         const cpc = clicks > 0 ? spend / clicks : 0;
+        const cpl = leads > 0 ? spend / leads : 0;
+
+        const purchaseValue = sumActions(ins.action_values, "offsite_conversion.fb_pixel_purchase", "onsite_conversion.purchase", "purchase");
+        const roas = spend > 0 ? purchaseValue / spend : 0;
 
         return {
           id: ad.id,
@@ -242,6 +300,11 @@ export function useAdsPerformance(
             comments,
             shares,
             videoViews,
+            leads,
+            cpl,
+            roas,
+            landingPageViews,
+            postEngagements,
             currency: ins.account_currency || "INR",
           },
         };

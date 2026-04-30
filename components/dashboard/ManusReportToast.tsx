@@ -14,7 +14,19 @@ export default function ManusReportToast({ state, onDismiss, dark }: Props) {
 
   if (status === "idle") return null;
 
-  const isActive = status === "creating" || status === "running" || status === "waiting";
+  const statusLabel: Record<string, string> = {
+    creating: "Submitting to Manus…",
+    running: "Manus is analyzing your ads…",
+    waiting: "Manus is waiting for input…",
+    done: "Analysis complete…",
+    building: "Building HTML report…",
+    error: "Something went wrong",
+    idle: "",
+  };
+
+  const isActive =
+    status === "creating" || status === "running" || status === "waiting" || status === "building";
+  const isSpinning = ["creating", "running", "waiting", "done", "building"].includes(status);
   const isDone = status === "done";
   const isError = status === "error";
 
@@ -36,7 +48,7 @@ export default function ManusReportToast({ state, onDismiss, dark }: Props) {
     >
       {/* Icon / Spinner */}
       <div className="flex-shrink-0 mt-0.5">
-        {isActive && (
+        {isSpinning && (
           <svg
             className={`animate-spin w-4 h-4 ${dark ? "text-fuchsia-400" : "text-fuchsia-600"}`}
             xmlns="http://www.w3.org/2000/svg"
@@ -86,11 +98,7 @@ export default function ManusReportToast({ state, onDismiss, dark }: Props) {
                 : dark ? "text-white/80" : "text-slate-800"
           }`}
         >
-          {isDone
-            ? "Report Ready!"
-            : isError
-              ? "Report Failed"
-              : "Generating Report…"}
+          {statusLabel[status]}
         </p>
 
         {isActive && brief && (

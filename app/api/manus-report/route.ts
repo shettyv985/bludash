@@ -1,224 +1,221 @@
 // app/api/manus-report/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import type { ReportPayload } from "@/lib/buildReportPayload";
 
 const MANUS_BASE = "https://api.manus.ai/v2";
 
-// Map client name → env var prefix
-function getClientEnvPrefix(client: string): string {
-  // Normalize: uppercase, strip spaces/special chars
-  return client.toUpperCase().replace(/[^A-Z0-9]/g, "");
+function buildPrompt(payload: ReportPayload): string {
+  return `You are a world-class Meta Ads strategist with 15+ years of experience managing high-budget campaigns for premium brands in India. You are known for your brutally honest, data-driven analysis that identifies the EXACT reasons why campaigns succeed or fail — not generic advice.
+
+CRITICAL INSTRUCTION: Your ENTIRE response must be a single valid JSON object. No markdown, no prose, no code fences, no explanation outside the JSON. Start with { and end with }.
+
+You must analyze the data below with EXTREME SPECIFICITY. Every insight must:
+- Reference the EXACT ad name, campaign name, spend amount, and metric
+- Explain the PSYCHOLOGICAL or STRATEGIC reason WHY something is working or not
+- Give ACTIONABLE next steps with expected numeric outcomes
+- Compare against industry benchmarks provided in the data
+
+For creative analysis specifically:
+- Explain WHY a creative worked: Was it the hook? The emotion? The offer? The format? The CTA?
+- Explain WHY a creative failed: Weak hook? Wrong audience? Poor visual hierarchy? No urgency?
+- Reference the specific CTR, video view rate, engagement rate as evidence
+- Suggest EXACTLY what to change (specific copy direction, visual style, CTA wording)
+
+Return this exact JSON schema (all fields required, no nulls):
+{
+  "overallHealthScore": {
+    "score": <1-10 integer>,
+    "label": "<Poor|Below Average|Average|Good|Excellent>",
+    "reasoning": "<4-5 sentences with specific numbers. State exact CTR, CPL, CPM vs benchmarks. Explain the single biggest factor dragging performance down and the single biggest bright spot.>"
+  },
+  "executiveSummary": "<5-7 sentence paragraph. Open with the most important finding. Quantify everything. Name specific campaigns and ads. Close with the single most urgent action.>",
+  "keyTakeaways": [
+    "<Takeaway with exact numbers — e.g. 'The Wedding vertical delivers 47% of all leads at 31% of total spend, making it the highest ROI vertical in the account'>",
+    "<Takeaway>",
+    "<Takeaway>",
+    "<Takeaway>",
+    "<Takeaway>"
+  ],
+  "accountDiagnosis": {
+    "biggestProblem": "<The single most critical issue holding back performance, with exact data>",
+    "biggestOpportunity": "<The single biggest untapped opportunity with estimated impact>",
+    "spendEfficiencyScore": "<e.g. '43/100 — budget is heavily misallocated'>",
+    "creativeHealthScore": "<e.g. '35/100 — only 2 of 8 creatives are performing above benchmark'>"
+  },
+  "whatIsWorking": [
+    {
+      "point": "<Short title>",
+      "whyItWorks": "<Deep explanation of the psychological/strategic reason this works. Is it the creative format? The audience match? The offer? The hook? The emotion triggered? Reference exact metrics.>",
+      "evidence": "<Exact metrics: CTR X%, CPL ₹X, Leads X, Spend ₹X, Engagement rate X%>",
+      "recommendation": "<Exact scaling action with expected outcome — e.g. 'Increase daily budget from ₹500 to ₹800, expected to generate 15 additional leads at similar CPL'>",
+      "scalingPotential": "<High|Medium|Low with reason>"
+    }
+  ],
+  "whatIsNotWorking": [
+    {
+      "point": "<Short title>",
+      "whyItFails": "<Deep diagnosis of the root cause. Is it a creative problem (hook, format, message)? Audience mismatch? Offer problem? Landing page? Ad fatigue? Reference exact metrics as evidence.>",
+      "evidence": "<Exact metrics showing failure>",
+      "recommendation": "<Exact fix — what to change, how to change it, expected result>",
+      "verdict": "<Pause Immediately|Needs Creative Fix|Needs Audience Fix|Needs Budget Reallocation>"
+    }
+  ],
+  "creativeDeepDive": {
+    "topPerformer": {
+      "adName": "<exact ad name>",
+      "whyItWorks": "<Detailed breakdown: What is the hook doing? What emotion does it trigger? Why does the audience respond? What is the creative format advantage? What makes the CTA compelling? Minimum 4 sentences.>",
+      "keyMetrics": "<CTR: X%, CPL: ₹X, Leads: X, Video view rate: X%, Engagement rate: X%>",
+      "whatToReplicate": "<Specific creative direction for new ads based on what works here — e.g. 'POV-style first-person perspective, emotional wedding moment in first 3 seconds, urgency-driven CTA'>"
+    },
+    "worstPerformer": {
+      "adName": "<exact ad name>",
+      "whyItFails": "<Detailed creative autopsy: What is the hook doing wrong? What is the audience experiencing in the first 3 seconds? Why are they scrolling past? What emotional or logical trigger is missing? Minimum 4 sentences.>",
+      "keyMetrics": "<CTR: X%, CPL: ₹X, Spend wasted: ₹X, Video view rate: X%>",
+      "whatToChange": "<Specific creative brief for replacement — exact hook concept, visual style, messaging angle, CTA>"
+    },
+    "creativeRankings": [
+      {
+        "rank": 1,
+        "adName": "<name>",
+        "verdict": "<one sentence why this ranks here>",
+        "ctr": "<X%>",
+        "cpl": "<₹X or N/A>",
+        "leads": <number>,
+        "spend": "<₹X>",
+        "creativeDiagnosis": "<2-3 sentences on creative effectiveness>"
+      }
+    ],
+    "formatAnalysis": {
+      "videoVsStatic": "<Analysis of video performance vs static — which format is winning and why based on the data>",
+      "recommendations": ["<Specific format recommendation>", "<Specific format recommendation>"]
+    }
+  },
+  "campaignAnalysis": [
+    {
+      "campaignName": "<exact name>",
+      "verdict": "<Performing Well|Needs Attention|Underperforming|Burn Risk>",
+      "spendShare": "<X% of total budget>",
+      "leadsShare": "<X% of total leads>",
+      "efficiency": "<CPL ₹X vs account average ₹X — X% above/below average>",
+      "rootCause": "<The specific reason this campaign is performing at this level — audience, creative, offer, objective alignment, or budget>",
+      "analysis": "<3-4 sentences with specific metrics, named ads, and clear diagnosis>",
+      "action": "<Specific action with exact budget/bid numbers if relevant>",
+      "urgency": "<Do Today|This Week|This Month>"
+    }
+  ],
+  "adSetAnalysis": [
+    {
+      "adSetName": "<name>",
+      "campaignName": "<parent campaign>",
+      "spend": "<₹X>",
+      "leads": <number>,
+      "cpl": "<₹X>",
+      "observation": "<Key insight about this ad set's targeting or budget performance>",
+      "recommendation": "<Specific action>"
+    }
+  ],
+  "budgetOptimization": {
+    "currentAllocation": "<Assessment of how budget is currently split and the efficiency of that split>",
+    "wastedSpend": "<Estimated ₹X being wasted on underperforming ads with specific names>",
+    "summary": "<Overall budget health with specific reallocation recommendation>",
+    "actions": [
+      {
+        "action": "<Specific reallocation — e.g. 'Move ₹500/day from LG CBO Corporate to BS LG CBO Wedding'>",
+        "reason": "<Exact data-backed reason>",
+        "expectedImpact": "<Projected outcome — e.g. 'Expected to reduce account CPL from ₹393 to ₹310 within 7 days'>"
+      }
+    ]
+  },
+  "audienceAndTargeting": {
+    "whatTheDataReveals": "<What does the performance variance across campaigns tell us about which audiences are most receptive? Be specific.>",
+    "highPerformingAudiences": ["<Describe the audience that is responding best and why>"],
+    "failingAudiences": ["<Describe the audience that is not converting and why>"],
+    "observations": "<Deep targeting analysis — what does CTR and engagement data reveal about audience-message fit?>",
+    "recommendations": ["<Specific targeting recommendation>", "<Specific targeting recommendation>", "<Specific targeting recommendation>"]
+  },
+  "leadsAnalysis": {
+    "totalLeads": <number>,
+    "costPerLead": "<₹X>",
+    "leadQualityAssessment": "<Based on CPL trends and campaign objectives, assess likely lead quality>",
+    "bestLeadSource": "<Which ad/campaign/adset is generating the best leads at the best cost and why>",
+    "worstLeadSource": "<Which ad/campaign is burning budget with worst lead efficiency>",
+    "observations": "<Full analysis of lead generation patterns>",
+    "recommendations": ["<Specific lead gen recommendation>", "<Specific lead gen recommendation>"]
+  },
+  "competitiveContext": {
+    "benchmarkComparison": "<How does this account's CTR, CPL, CPM compare to the provided industry benchmarks? What does this tell us about competitive positioning?>",
+    "marketObservations": "<What do the CPM trends suggest about auction competitiveness in these verticals?>"
+  },
+  "prioritizedActions": [
+    {
+      "priority": <1-10, where 1 is most urgent>,
+      "action": "<Specific, executable action — not vague advice>",
+      "reason": "<Exact data reason — reference specific ad names and numbers>",
+      "expectedResult": "<Measurable outcome with estimated numbers>",
+      "effort": "<Low|Medium|High>",
+      "timeToImpact": "<24hrs|3-5 days|1-2 weeks>"
+    }
+  ],
+  "thirtyDayPlan": [
+    {
+      "week": "Week 1",
+      "focus": "<Theme>",
+      "goal": "<Specific measurable goal for this week>",
+      "tasks": [
+        "<Specific task with exact ad names, numbers, and actions>",
+        "<Specific task>",
+        "<Specific task>"
+      ]
+    },
+    {
+      "week": "Week 2",
+      "focus": "<Theme>",
+      "goal": "<Specific measurable goal>",
+      "tasks": ["<task>", "<task>", "<task>"]
+    },
+    {
+      "week": "Week 3",
+      "focus": "<Theme>",
+      "goal": "<Specific measurable goal>",
+      "tasks": ["<task>", "<task>", "<task>"]
+    },
+    {
+      "week": "Week 4",
+      "focus": "<Theme>",
+      "goal": "<Specific measurable goal>",
+      "tasks": ["<task>", "<task>", "<task>"]
+    }
+  ],
+  "quickWins": [
+    {
+      "action": "<Something that can be done in under 10 minutes with immediate impact>",
+      "expectedImpact": "<Projected result>",
+      "howTo": "<Step by step instruction>"
+    }
+  ]
 }
 
-function getClientCredentials(client: string) {
-  const prefix = getClientEnvPrefix(client);
-  return {
-    token: process.env[`${prefix}_TOKEN`] ?? "",
-    fbPageId: process.env[`${prefix}_FB_PAGE_ID`] ?? "",
-    igUserId: process.env[`${prefix}_IG_USER_ID`] ?? "",
-    adAccountId: process.env[`${prefix}_AD_ACCOUNT_ID`] ?? "",
-  };
+--- FULL PERFORMANCE DATA ---
+${JSON.stringify(payload, null, 2)}`;
 }
 
 export async function POST(req: NextRequest) {
+  const manusApiKey = process.env.MANUS_API_KEY;
+  if (!manusApiKey) {
+    return NextResponse.json({ error: "MANUS_API_KEY is not configured" }, { status: 500 });
+  }
+
+  let payload: ReportPayload;
   try {
-    const { type, client, from, to } = await req.json();
+    const body = await req.json();
+    payload = body.payload;
+    if (!payload) throw new Error("Missing payload field");
+  } catch (err: any) {
+    return NextResponse.json({ error: `Invalid request body: ${err.message}` }, { status: 400 });
+  }
 
-    const manusApiKey = process.env.MANUS_API_KEY;
-    if (!manusApiKey) {
-      return NextResponse.json(
-        { error: "MANUS_API_KEY is missing in environment variables" },
-        { status: 500 }
-      );
-    }
-
-    const connectorIds =
-      process.env.MANUS_CONNECTOR_IDS?.split(",")
-        .map((id) => id.trim())
-        .filter(Boolean) ?? [];
-
-    const creds = getClientCredentials(client);
-
-    if (!creds.token || !creds.adAccountId) {
-      return NextResponse.json(
-        {
-          error: `No credentials found for client "${client}". Expected env vars: ${getClientEnvPrefix(client)}_TOKEN and ${getClientEnvPrefix(client)}_AD_ACCOUNT_ID`,
-        },
-        { status: 400 }
-      );
-    }
-
-    // Lean, credit-efficient deep research prompt — only reliable ad account endpoints
-    const prompt = `Review my Meta Ads performance for the last 30 days. Identify what's working, what's wasting budget, and give me actionable next steps.
-You are a senior performance marketing analyst. Produce a deeply researched, insight-rich advertising performance report for the client ${client} covering ${from} to ${to}.
-
-## STRICT RULES — READ BEFORE DOING ANYTHING
-
-1. **FAILURE HANDLING**: If any API call returns an error, log the error message once and IMMEDIATELY move to the next step. Do NOT retry the same endpoint. Do NOT try alternative date ranges. Do NOT loop. One attempt per endpoint, then move on.
-2. **NO LOOPS**: Never repeat a curl command with a slightly different parameter. If the data isn't available, note it as "Data unavailable" in the report and continue.
-3. **EFFICIENCY**: Make exactly the 6 API calls listed below. No more, no less. Do not add extra calls.
-
----
-
-## Your Credentials for Meta Graph API
-
-- Access Token: ${creds.token}
-- Ad Account ID: ${creds.adAccountId}
-
----
-
-## PHASE 1: DATA COLLECTION (6 calls only)
-
-Run all 6 of these curl commands and save to files. If any fails, save the error and move on immediately.
-
-**Call 1 — Account Overview**
-\`\`\`
-curl -G "https://graph.facebook.com/v19.0/${creds.adAccountId}/insights" \\
-  --data-urlencode "fields=spend,reach,impressions,clicks,ctr,cpm,cpc,frequency,unique_clicks,unique_ctr,actions,cost_per_action_type,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p95_watched_actions,video_thruplay_watched_actions,outbound_clicks,outbound_clicks_ctr" \\
-  --data-urlencode 'time_range={"since":"${from}","until":"${to}"}' \\
-  --data-urlencode "access_token=${creds.token}" > /tmp/account.json
-\`\`\`
-
-**Call 2 — All Campaigns**
-\`\`\`
-curl -G "https://graph.facebook.com/v19.0/${creds.adAccountId}/campaigns" \\
-  --data-urlencode "fields=id,name,objective,status,daily_budget,lifetime_budget,insights{spend,reach,impressions,clicks,ctr,cpm,cpc,frequency,actions,cost_per_action_type,unique_clicks,unique_ctr}" \\
-  --data-urlencode 'time_range={"since":"${from}","until":"${to}"}' \\
-  --data-urlencode "access_token=${creds.token}" > /tmp/campaigns.json
-\`\`\`
-
-**Call 3 — All Ads with Metrics**
-\`\`\`
-curl -G "https://graph.facebook.com/v19.0/${creds.adAccountId}/ads" \\
-  --data-urlencode "fields=id,name,status,campaign{name,objective},adset{name,optimization_goal,daily_budget},insights{spend,reach,impressions,clicks,ctr,cpm,cpc,frequency,actions,cost_per_action_type,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p95_watched_actions,video_thruplay_watched_actions,unique_clicks,unique_ctr,outbound_clicks}" \\
-  --data-urlencode 'time_range={"since":"${from}","until":"${to}"}' \\
-  --data-urlencode "access_token=${creds.token}" > /tmp/ads.json
-\`\`\`
-
-**Call 4 — Daily Trend**
-\`\`\`
-curl -G "https://graph.facebook.com/v19.0/${creds.adAccountId}/insights" \\
-  --data-urlencode "fields=spend,reach,impressions,clicks,ctr,cpm,actions" \\
-  --data-urlencode 'time_range={"since":"${from}","until":"${to}"}' \\
-  --data-urlencode "time_increment=1" \\
-  --data-urlencode "access_token=${creds.token}" > /tmp/daily.json
-\`\`\`
-
-**Call 5 — Age & Gender Breakdown**
-\`\`\`
-curl -G "https://graph.facebook.com/v19.0/${creds.adAccountId}/insights" \\
-  --data-urlencode "fields=spend,reach,impressions,clicks,ctr,cpm,actions" \\
-  --data-urlencode 'time_range={"since":"${from}","until":"${to}"}' \\
-  --data-urlencode "breakdowns=age,gender" \\
-  --data-urlencode "access_token=${creds.token}" > /tmp/demographics.json
-\`\`\`
-
-**Call 6 — Placement Breakdown**
-\`\`\`
-curl -G "https://graph.facebook.com/v19.0/${creds.adAccountId}/insights" \\
-  --data-urlencode "fields=spend,reach,impressions,clicks,ctr,cpm,actions" \\
-  --data-urlencode 'time_range={"since":"${from}","until":"${to}"}' \\
-  --data-urlencode "breakdowns=publisher_platform,platform_position" \\
-  --data-urlencode "access_token=${creds.token}" > /tmp/placements.json
-\`\`\`
-
----
-
-## PHASE 2: ANALYSIS
-
-Parse all 6 JSON files. Extract every number. Then answer these questions analytically (these become the backbone of your report):
-
-**Leads & CPL**
-- What is the total lead count from actions where action_type = "lead" or "onsite_conversion.lead_grouped"?
-- What is the CPL per campaign and per ad? Rank them best to worst.
-- Which campaigns/ads generated zero leads despite significant spend?
-- Industry benchmark for hospitality/catering/events in India: ₹80–250 CPL. How does this account compare?
-
-**Efficiency**
-- Account average CTR: calculate it. Which ads are >50% above average (stars)? Which are >30% below (laggards)?
-- Account average CPM: calculate it. Which placements or campaigns are significantly more expensive?
-- Which ads have high reach (top 25%) but low CTR (bottom 25%)? These are wasted awareness spends.
-- Which ads have high frequency (>3) with declining CTR? Audience fatigue candidates.
-
-**Creative Format**
-- Separate video ads (those with video_thruplay_watched_actions or video_p25 data) from static ads.
-- For video ads: compute average watch-through at p25/p50/p75/p95. Are people watching or dropping off?
-- Which format — video vs static — has better CTR, lower CPM, lower CPL?
-
-**Daily Trends**
-- What was the daily average spend? Which days were significantly above/below?
-- Did CTR trend up or down over the period? 
-- Were there CPM spikes on specific days indicating auction competition?
-
-**Placements**
-- Rank all placements by CTR and by spend. 
-- Which placements spent >10% of budget but delivered <5% of clicks?
-
-**Audience**
-- Which age+gender combination had the highest CTR? Lowest CPL?
-- Which segments are overfunded relative to their performance?
-
----
-
-## PHASE 3: WRITE THE PDF REPORT
-
-Now produce a beautifully designed, professionally formatted PDF. Every section must cite real numbers from the data. No generic statements.
-
-**Section 1 — Cover Page**
-${client} | ${type} | ${from} to ${to} | Generated: today's date | Bludash Agency
-
-**Section 2 — Executive Summary**
-6–8 bullet points. Each must be a specific finding with a number. Example format: "Spent ₹X across 5 campaigns generating Y leads — average CPL of ₹Z vs industry benchmark of ₹80–250." Include the single biggest win and single biggest red flag.
-
-**Section 3 — Account Performance Scorecard**
-Table with all key metrics: Spend, Reach, Impressions, Clicks (all), Link Clicks, CTR, CPM, CPC, Frequency, Leads, CPL. Add a benchmark column where applicable. Color code: green if beating benchmark, red if below.
-
-**Section 4 — Daily Performance Trend**
-Describe the daily spend and CTR trend. Call out: peak day, lowest day, any CPM spike days. State whether performance improved or declined over the period.
-
-**Section 5 — Campaign Deep Dive**
-For each of the 5 campaigns, a mini-section with: metrics table (spend, reach, clicks, CTR, CPM, CPL, leads) + 3-sentence analyst verdict. Be direct: "This campaign is underperforming because X. It should be Y."
-
-**Section 6 — Ad Performance Table**
-Full table of all 16 ads. Columns: Ad Name, Campaign, Status, Spend, Reach, Impressions, Clicks, CTR, CPM, CPC, Likes, Shares, Video Views, Leads, CPL. Color-code CTR and CPL cells (green/yellow/red).
-
-**Section 7 — Creative Format Analysis**
-Video vs Static comparison table. Include: count of each, avg CTR, avg CPM, avg CPL, total leads. For videos: avg p25/p50/p75/p95 completion rates. State which format is winning and by what margin.
-
-**Section 8 — Audience Breakdown**
-Table of age/gender segments sorted by CTR desc. Highlight the top 2 converting segments and the bottom 2 wasted segments with specific spend figures.
-
-**Section 9 — Placement Analysis**
-Table of all placements: platform, position, spend, impressions, clicks, CTR, CPM. Flag any placement spending >₹2,000 with CTR below account average.
-
-**Section 10 — Key Wins (What's Working)**
-4–5 specific wins. Each must name the exact ad/campaign, cite 2–3 metrics, and explain why it's a win. Example: "BS POV Regal Wedding (BS LG CBO Wedding) — CTR 0.83%, CPM ₹60, 1,069 clicks from ₹7,789 spend. This is the account's most efficient awareness-to-click ad, running 23% cheaper CPM than account average."
-
-**Section 11 — Red Flags (What's Not Working)**
-4–5 specific problems. Same format: name the asset, cite the numbers, explain the problem clearly. Example: "LTS CATER — ₹4,947 spent, CPM ₹100 (29% above account avg), CTR 0.62% (21% below avg), only 104 video views. This ad is expensive and ignored. It has consumed 9.4% of total budget with proportionally poor returns."
-
-**Section 12 — Prioritised Action Plan**
-8–10 recommendations. Each must follow this exact structure:
-▶ ACTION: [Specific action — pause/scale/restructure/test X]
-📊 DATA: [The exact numbers that justify this — cite the ad name and metrics]
-🎯 EXPECTED IMPACT: [What should improve and by roughly how much]
-⚡ PRIORITY: HIGH / MEDIUM / LOW
-
-**Section 13 — Budget Reallocation**
-Current budget distribution table vs recommended distribution. Show exactly which campaigns to reduce, which to increase, and by how much (in ₹ and %). Justify each change with CPL data.
-
----
-
-## OUTPUT REQUIREMENTS
-- PDF file, downloadable
-- Clean design: dark header, white body, color-coded metric cells (green ≥ benchmark, yellow within 20%, red > 20% below)
-- Page numbers on every page
-- Section headers clearly marked
-- All currency in ₹ (Indian Rupee)
-- No raw JSON anywhere in the document
-- Be opinionated and direct — this is an analyst report, not a neutral summary
-`.trim();
-
-    const manusRes = await fetch(`${MANUS_BASE}/task.create`, {
+  try {
+    const res = await fetch(`${MANUS_BASE}/task.create`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -226,41 +223,37 @@ Current budget distribution table vs recommended distribution. Show exactly whic
       },
       body: JSON.stringify({
         message: {
-          content: prompt,
-          connectors: connectorIds,
+          content: buildPrompt(payload),
         },
-        title: `Bludash ${type} — ${client} — ${from} to ${to}`,
-        hide_in_task_list: false,
-        share_visibility: "private",
-        interactive_mode: false,
-        agent_profile: "manus-1.6",
       }),
     });
 
-    const manusData = await manusRes.json();
+    const text = await res.text();
+    let data: any = {};
+    try {
+      data = JSON.parse(text);
+    } catch {
+      console.error("Non-JSON from Manus task.create:", text.slice(0, 500));
+      return NextResponse.json({ error: "Manus returned a non-JSON response" }, { status: 500 });
+    }
 
-    if (!manusRes.ok) {
+    if (!res.ok) {
+      console.error("Manus task.create HTTP error:", res.status, data);
       return NextResponse.json(
-        {
-          error:
-            manusData?.error?.message ||
-            manusData?.message ||
-            "Failed to create Manus task",
-        },
-        { status: manusRes.status }
+        { error: data?.error?.message ?? data?.message ?? `Manus API error (${res.status})` },
+        { status: res.status }
       );
     }
 
-    return NextResponse.json({
-      ok: true,
-      taskId: manusData.task_id,
-      taskUrl: manusData.task_url,
-      taskTitle: manusData.task_title,
-    });
-  } catch (error: any) {
-    return NextResponse.json(
-      { error: error.message || "Something went wrong" },
-      { status: 500 }
-    );
+    const taskId: string = data.task_id ?? data.id ?? "";
+    if (!taskId) {
+      console.error("No task_id in Manus response:", data);
+      return NextResponse.json({ error: "Manus did not return a task ID" }, { status: 500 });
+    }
+
+    return NextResponse.json({ taskId });
+  } catch (err: any) {
+    console.error("manus-report unhandled error:", err);
+    return NextResponse.json({ error: err?.message ?? "Internal server error" }, { status: 500 });
   }
 }
