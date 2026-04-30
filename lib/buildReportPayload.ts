@@ -204,7 +204,7 @@ export function buildReportPayload(
   const analyzedAds: AnalyzedAd[] = allAds.map((ad) => {
     const ins = ad.insights;
     const engagementRate = pct(ins.likes + ins.comments + ins.shares, ins.reach);
-    const videoViewRate  = ins.isVideo ? pct(ins.videoViews, ins.impressions) : 0;
+    const videoViewRate  = ad.isVideo ? pct(ins.videoViews, ins.impressions) : 0;
 
     return {
       id: ad.id,
