@@ -18,6 +18,8 @@ export interface ManusReportState {
   brief: string;
   reportData: any | null;
   taskUrl: string | null;
+  pdfUrl: string | null;
+  pdfFilename: string | null;
   error: string | null;
 }
 
@@ -48,6 +50,8 @@ export function useManusReport() {
     brief: "",
     reportData: null,
     taskUrl: null,
+    pdfUrl: null,
+    pdfFilename: null,
     error: null,
   });
 
@@ -77,7 +81,13 @@ export function useManusReport() {
 
       if (!ok) {
         stopPolling();
-        setState((s) => ({ ...s, status: "error", error: data?.error ?? "Polling failed" }));
+        setState((s) => ({
+          ...s,
+          status: "error",
+          pdfUrl: null,
+          pdfFilename: null,
+          error: data?.error ?? "Polling failed",
+        }));
         return;
       }
 
@@ -90,6 +100,8 @@ export function useManusReport() {
           brief: "Deep analysis complete — now building HTML report with Manus…",
           reportData: data.reportData ?? null,
           taskUrl: data.taskUrl ?? null,
+          pdfUrl: data.pdfUrl ?? null,
+          pdfFilename: data.pdfFilename ?? null,
           error: null,
         });
         return;
@@ -106,6 +118,8 @@ export function useManusReport() {
         status: status === "waiting" ? "waiting" : "running",
         brief: data?.brief ?? s.brief,
         taskUrl: data?.taskUrl ?? s.taskUrl,
+        pdfUrl: data?.pdfUrl ?? s.pdfUrl,
+        pdfFilename: data?.pdfFilename ?? s.pdfFilename,
       }));
 
       pollTimerRef.current = setTimeout(() => poll(taskId), POLL_INTERVAL_MS);
@@ -123,6 +137,8 @@ export function useManusReport() {
         brief: "Submitting to Manus for deep analysis…",
         reportData: null,
         taskUrl: null,
+        pdfUrl: null,
+        pdfFilename: null,
         error: null,
       });
 
@@ -160,7 +176,15 @@ export function useManusReport() {
 
   const dismiss = useCallback(() => {
     stopPolling();
-    setState({ status: "idle", brief: "", reportData: null, taskUrl: null, error: null });
+    setState({
+      status: "idle",
+      brief: "",
+      reportData: null,
+      taskUrl: null,
+      pdfUrl: null,
+      pdfFilename: null,
+      error: null,
+    });
   }, [stopPolling]);
 
   return { state, generateReport, setBuilding, dismiss };
