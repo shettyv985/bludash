@@ -3,7 +3,7 @@
 // Manus receives this — it never needs to fetch, calculate, or format.
 // All heavy lifting is done here so Manus only writes insights.
 
-import type { Ad, Campaign } from "@/hooks/useAdsPerformance";
+import type { Ad, Campaign } from "@/components/dashboard/useAdsPerformance";
 
 // ─── Industry benchmarks for Meta Ads (India market) ─────────────────────────
 const BENCHMARKS = {
