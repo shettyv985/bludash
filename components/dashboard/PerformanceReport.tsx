@@ -86,42 +86,28 @@ function SummaryCard({
 }) {
   return (
     <div
-      className={`rounded-xl border overflow-hidden ${
+      className={`rounded-[20px] border p-4 transition-colors ${
         dark
-          ? "bg-[#1a1a2e] border-white/[0.08]"
-          : "bg-white border-black/[0.1] shadow-[0_1px_4px_rgba(0,0,0,0.06)]"
+          ? "border-blue-400/20 bg-[linear-gradient(145deg,rgba(18,26,52,0.98),rgba(10,14,28,0.95))] shadow-[0_16px_40px_rgba(37,99,235,0.18)]"
+          : "border-blue-200 bg-[linear-gradient(145deg,#ffffff,#eff6ff)] shadow-[0_16px_40px_rgba(37,99,235,0.10)]"
       }`}
     >
-      <div className="px-4 pt-4 pb-3">
-        <div className="flex items-center justify-between mb-2">
-          <p
-            className={`text-[10px] font-semibold tracking-[0.14em] uppercase ${
-              dark ? "text-white/35" : "text-slate-400"
-            }`}
-          >
-            {label}
-          </p>
-          <div
-            className={`w-7 h-7 rounded-lg flex items-center justify-center ${
-              dark ? "bg-white/[0.05]" : "bg-slate-100"
-            }`}
-          >
-            {icon}
-          </div>
-        </div>
-        <p
-          className={`text-[26px] font-bold leading-none tracking-tight ${
-            accent || (dark ? "text-white" : "text-slate-900")
-          }`}
-        >
-          {value}
+      <div className="flex items-start justify-between gap-3 mb-4">
+        <p className={`text-[10px] font-semibold tracking-[0.08em] uppercase truncate ${dark ? "text-white/55" : "text-slate-500"}`}>
+          {label}
         </p>
-        {sub && (
-          <p className={`text-[10px] mt-1 ${dark ? "text-white/25" : "text-slate-400"}`}>
-            {sub}
-          </p>
-        )}
+        <div className={`w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 ${dark ? "bg-white/[0.07]" : "bg-blue-100"}`}>
+          {icon}
+        </div>
       </div>
+      <p className={`text-[20px] sm:text-[22px] font-bold leading-none tracking-[-0.02em] break-all ${accent || (dark ? "text-white" : "text-slate-950")}`}>
+  {value}
+</p>
+      {sub && (
+        <div className={`mt-4 rounded-xl px-3 py-2 border ${dark ? "border-white/[0.06] bg-white/[0.04]" : "border-slate-200/80 bg-slate-50/80"}`}>
+          <p className={`text-[10px] leading-relaxed font-medium ${dark ? "text-white/40" : "text-slate-500"}`}>{sub}</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -361,16 +347,16 @@ function GroupedView({
         return (
           <div
             key={camp.id}
-            className={`rounded-xl border overflow-hidden ${
+            className={`rounded-[20px] border overflow-hidden ${
               dark
                 ? "border-white/[0.08] bg-[#0f0f1a]"
-                : "border-black/[0.1] bg-white shadow-[0_1px_4px_rgba(0,0,0,0.05)]"
+                : "border-slate-200 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.07)]"
             }`}
           >
             <button
               onClick={() => toggleCampaign(camp.id)}
               className={`w-full flex items-center gap-3 px-4 py-3.5 text-left transition-colors ${
-                dark ? "bg-[#1a1a2e] hover:bg-[#1e1e35]" : "bg-slate-50 hover:bg-slate-100"
+                dark ? "bg-[#1a1a2e] hover:bg-[#1e1e35]" : "bg-[linear-gradient(135deg,#eff6ff,#f8fafc)] hover:bg-blue-50"
               }`}
             >
               <div
@@ -557,16 +543,16 @@ function FlatTable({
 
   return (
     <div
-      className={`rounded-xl border overflow-hidden ${
+      className={`rounded-[20px] border overflow-hidden ${
         dark
           ? "border-white/[0.08] bg-[#0f0f1a]"
-          : "border-black/[0.1] bg-white shadow-[0_1px_4px_rgba(0,0,0,0.05)]"
+          : "border-slate-200 bg-white shadow-[0_18px_48px_rgba(15,23,42,0.08)]"
       }`}
     >
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className={dark ? "bg-[#1a1a2e]" : "bg-slate-100"}>
+<tr className={dark ? "bg-[#1a1a2e] border-b border-white/[0.08]" : "bg-slate-50 border-b border-slate-200"}>
               {headers.map((h) => {
                 const active = h.key === sortKey;
                 return (
@@ -1120,7 +1106,7 @@ const activeAds = summary.activeAds;
           </svg>
           <p className="text-[13px] text-red-400">{error}</p>
         </div>
-        <button onClick={onBack} className={`text-[12px] px-4 py-2 rounded-lg border transition-all ${dark ? "border-white/10 text-white/40 hover:text-white/80" : "border-black/10 text-black/40 hover:text-black/70"}`}>
+        <button onClick={onBack} className={`text-[12px] px-4 py-2 rounded-lg border transition-all ${dark ? "border-white/10 text-white/40 hover:text-white/80" : "border-slate-300 text-slate-500 hover:text-slate-800"}`}>
           ← Back
         </button>
       </div>
@@ -1143,8 +1129,8 @@ const activeAds = summary.activeAds;
         </button>
 
         <div className="flex items-center gap-2">
-          <div className={`h-px w-8 ${dark ? "bg-white/10" : "bg-black/10"}`} />
-          <span className={`text-[11px] tracking-widest uppercase font-medium ${dark ? "text-white/25" : "text-black/25"}`}>
+          <div className={`h-px w-8 ${dark ? "bg-white/10" : "bg-slate-200"}`} />
+          <span className={`text-[11px] tracking-widest uppercase font-medium ${dark ? "text-white/25" : "text-slate-400"}`}>
             Performance Report · {fromLabel} — {toLabel}
           </span>
           <div className={`h-px w-8 ${dark ? "bg-white/10" : "bg-black/10"}`} />
@@ -1210,7 +1196,7 @@ const activeAds = summary.activeAds;
       </div>
 
       {/* Summary Cards — Row 1 */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-3">
   <SummaryCard
     label="Total Spend"
     value={fmtMoney(totalSpend)}
@@ -1338,7 +1324,7 @@ const activeAds = summary.activeAds;
   />
 </div>
 
-<div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+<div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
   <SummaryCard
     label="Total Leads"
     value={totalLeads > 0 ? fmt(totalLeads) : "—"}
@@ -1446,7 +1432,7 @@ const activeAds = summary.activeAds;
               fill="none"
               stroke="currentColor"
               strokeWidth="2"
-              className={`absolute left-3.5 top-1/2 -translate-y-1/2 ${dark ? "text-white/25" : "text-black/25"}`}
+              className={`absolute left-3.5 top-1/2 -translate-y-1/2 ${dark ? "text-white/25" : "text-slate-400"}`}
             >
               <circle cx="11" cy="11" r="8" />
               <line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -1459,12 +1445,12 @@ const activeAds = summary.activeAds;
               className={`w-full pl-9 pr-4 py-2.5 rounded-xl text-sm transition-all focus:outline-none ${
                 dark
                   ? "bg-white/[0.03] border border-white/[0.07] text-white placeholder:text-white/20 focus:border-blue-500/40"
-                  : "bg-white/80 border border-slate-200 text-[#0a0a14] placeholder:text-black/20 focus:border-blue-500/40"
+: "bg-white border border-slate-300 text-slate-900 placeholder:text-slate-400 focus:border-blue-500"
               }`}
             />
           </div>
 
-          <div className={`flex rounded-xl p-1 gap-1 w-fit ${dark ? "bg-white/[0.03] border border-white/[0.06]" : "bg-black/[0.03] border border-black/[0.06]"}`}>
+          <div className={`flex rounded-xl p-1 gap-1 w-fit ${dark ? "bg-white/[0.03] border border-white/[0.06]" : "bg-slate-100 border border-slate-200"}`}>
             <button
               onClick={() => setViewMode("flat")}
               className={`px-4 py-2 rounded-lg text-[12px] font-semibold transition-all duration-200 ${
@@ -1472,7 +1458,7 @@ const activeAds = summary.activeAds;
                   ? "bg-blue-600 text-white shadow-[0_2px_12px_rgba(59,130,246,0.3)]"
                   : dark
                     ? "text-white/40 hover:text-white/70"
-                    : "text-black/40 hover:text-black/70"
+: "text-slate-500 hover:text-slate-800"
               }`}
             >
               Flat View
@@ -1502,7 +1488,7 @@ const activeAds = summary.activeAds;
                   ? "bg-emerald-600 text-white shadow-[0_2px_10px_rgba(16,185,129,0.3)]"
                   : dark
                     ? "bg-white/[0.04] text-white/35 hover:text-white/60 border border-white/[0.06]"
-                    : "bg-black/[0.04] text-black/35 hover:text-black/60 border border-black/[0.06]"
+                    : "bg-slate-100 text-slate-500 hover:text-slate-700 border border-slate-200"
               }`}
             >
               {tab}
@@ -1520,7 +1506,7 @@ const activeAds = summary.activeAds;
                   ? "bg-blue-600 text-white shadow-[0_2px_10px_rgba(59,130,246,0.3)]"
                   : dark
                     ? "bg-white/[0.04] text-white/35 hover:text-white/60 border border-white/[0.06]"
-                    : "bg-black/[0.04] text-black/35 hover:text-black/60 border border-black/[0.06]"
+                    : "bg-slate-100 text-slate-500 hover:text-slate-700 border border-slate-200"
               }`}
             >
               {tab.label}
