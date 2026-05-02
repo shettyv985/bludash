@@ -104,7 +104,7 @@ export function useAdsPerformance(
     let nextUrl: string | null = initialUrl;
 
     while (nextUrl && items.length < maxItems) {
-      const res: Response = await fetch(nextUrl);
+      const res = await fetch(nextUrl);
       const data = await res.json();
 
       if (data.error) {
@@ -146,14 +146,13 @@ export function useAdsPerformance(
       );
 
       const rawAds = await fetchAllPages(
-        `${BASE}/${cfg.adAccountId}/ads?fields=id,name,status,campaign_id,adset_id,creative{thumbnail_url,image_url,object_story_spec,video_id},effective_status&limit=200&access_token=${cfg.token}`
+        `${BASE}/${cfg.adAccountId}/ads?fields=id,name,status,campaign_id,adset_id,creative{thumbnail_url,image_url,video_id},effective_status&limit=50&access_token=${cfg.token}`
       );
 
       const insightsParams = new URLSearchParams({
         fields:
-          "ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,spend,reach,impressions,clicks,actions,action_values,account_currency",
+          "ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,spend,reach,impressions,clicks,actions,action_values,account_currency,cpm,ctr",
         time_range: JSON.stringify({ since: from, until: to }),
-        time_increment: "1",
         level: "ad",
         limit: "500",
         access_token: cfg.token,
@@ -167,35 +166,7 @@ export function useAdsPerformance(
 
       const insMap: Record<string, any> = {};
       for (const ins of allInsights) {
-        if (!insMap[ins.ad_id]) {
-          insMap[ins.ad_id] = { ...ins };
-        } else {
-          // Aggregate insights for the same ad_id within the time range
-          insMap[ins.ad_id].spend = (parseFloat(insMap[ins.ad_id].spend || "0") + parseFloat(ins.spend || "0")).toString();
-          insMap[ins.ad_id].reach = (parseInt(insMap[ins.ad_id].reach || "0", 10) + parseInt(ins.reach || "0", 10)).toString();
-          insMap[ins.ad_id].impressions = (parseInt(insMap[ins.ad_id].impressions || "0", 10) + parseInt(ins.impressions || "0", 10)).toString();
-          insMap[ins.ad_id].clicks = (parseInt(insMap[ins.ad_id].clicks || "0", 10) + parseInt(ins.clicks || "0", 10)).toString();
-          // Aggregate actions as well
-          if (ins.actions) {
-            if (!insMap[ins.ad_id].actions) {
-              insMap[ins.ad_id].actions = [];
-            }
-            for (const newAction of ins.actions) {
-              const existingAction = insMap[ins.ad_id].actions.find(
-                (a: any) => a.action_type === newAction.action_type
-              );
-              if (existingAction) {
-                existingAction.value = (parseFloat(existingAction.value || "0") + parseFloat(newAction.value || "0")).toString();
-              } else {
-                insMap[ins.ad_id].actions.push({ ...newAction });
-              }
-            }
-          }
-          // Update account_currency if it's not set or different
-          if (!insMap[ins.ad_id].account_currency && ins.account_currency) {
-            insMap[ins.ad_id].account_currency = ins.account_currency;
-          }
-        }
+        insMap[ins.ad_id] = ins;
       }
 
       const campMap: Record<string, any> = {};
@@ -209,17 +180,10 @@ export function useAdsPerformance(
         const camp = campMap[ad.campaign_id] || {};
         const adSet = adSetMap[ad.adset_id] || {};
         const creative = ad.creative || {};
-        const spec = creative.object_story_spec || {};
 
-        const thumbnail =
-          creative.thumbnail_url ||
-          creative.image_url ||
-          spec.link_data?.picture ||
-          spec.photo_data?.url ||
-          null;
-
-        const videoId = creative.video_id || spec.video_data?.video_id || null;
-        const isVideo = !!videoId || !!spec.video_data;
+        const thumbnail = creative.thumbnail_url || creative.image_url || null;
+        const videoId = creative.video_id || null;
+        const isVideo = !!videoId;
 
         const spend = parseFloat(ins.spend || "0");
         const impressions = parseInt(ins.impressions || "0", 10);
@@ -249,29 +213,25 @@ export function useAdsPerformance(
           "video_watched"
         );
 
-        // Leads: focus on the primary 'lead' action type to avoid double-counting duplicates
-        // like 'onsite_conversion.lead_grouped' or 'offsite_conversion.fb_pixel_lead'.
-        const leads = getActionExact(
-          ins.actions,
-          "lead"
-        );
+        const leads = getActionExact(ins.actions, "lead");
 
-        const landingPageViews = getActionExact(
-          ins.actions,
-          "landing_page_view"
-        );
+        const landingPageViews = getActionExact(ins.actions, "landing_page_view");
 
-        const postEngagements = getActionExact(
-          ins.actions,
-          "post_engagement"
-        );
+        const postEngagements = getActionExact(ins.actions, "post_engagement");
 
-        const cpm = impressions > 0 ? (spend / impressions) * 1000 : 0;
-        const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0;
+        const cpm =
+          ins.cpm != null ? parseFloat(ins.cpm) : impressions > 0 ? (spend / impressions) * 1000 : 0;
+        const ctr =
+          ins.ctr != null ? parseFloat(ins.ctr) : impressions > 0 ? (clicks / impressions) * 100 : 0;
         const cpc = clicks > 0 ? spend / clicks : 0;
         const cpl = leads > 0 ? spend / leads : 0;
 
-        const purchaseValue = sumActions(ins.action_values, "offsite_conversion.fb_pixel_purchase", "onsite_conversion.purchase", "purchase");
+        const purchaseValue = sumActions(
+          ins.action_values,
+          "offsite_conversion.fb_pixel_purchase",
+          "onsite_conversion.purchase",
+          "purchase"
+        );
         const roas = spend > 0 ? purchaseValue / spend : 0;
 
         return {
