@@ -146,7 +146,6 @@ function getActionExact(actions: MetaAction[] | undefined, ...types: string[]): 
 
 function getActionMax(actions: MetaAction[] | undefined, ...types: string[]): number {
   if (!actions) return 0;
-
   return Math.max(...types.map((type) => getActionExact(actions, type)), 0);
 }
 
@@ -160,33 +159,24 @@ function sumActions(actions: MetaAction[] | undefined, ...types: string[]): numb
   return total;
 }
 
+// REPLACE the entire getLeadCount function with this:
 function getLeadCount(actions: MetaAction[] | undefined): number {
   if (!actions) return 0;
 
-  // 1. Top-level "lead" is the most reliable — use it if present
-  const leadCount = getActionExact(actions, "lead");
-  if (leadCount > 0) return leadCount;
+  // "lead" is Meta's deduplicated top-level count — source of truth at account level
+  const topLevelLead = getActionExact(actions, "lead");
+  const leadGrouped = getActionExact(actions, "onsite_conversion.lead_grouped", "leadgen_grouped");
+  const registrationLeads = getActionExact(actions, "offsite_complete_registration_add_meta_leads");
 
-  // 2. "lead_grouped" is Meta's deduplicated aggregate — use it next
-  const leadGrouped = getActionExact(
-    actions,
-    "onsite_conversion.lead_grouped",
-    "leadgen_grouped"
-  );
-  if (leadGrouped > 0) return leadGrouped;
+  const best = Math.max(topLevelLead, leadGrouped, registrationLeads);
+  if (best > 0) return best;
 
-  // 3. omni_lead as fallback
-  const omniLead = getActionExact(actions, "omni_lead");
-  if (omniLead > 0) return omniLead;
-
-  // 4. Last resort: sum individual lead subtypes (no overlap with above)
   return sumActions(
     actions,
     "onsite_conversion.lead",
     "offsite_conversion.fb_pixel_lead",
-    "offsite_conversion.fb_pixel_custom.lead",
     "onsite_conversion.messaging_lead",
-    "onsite_conversion.messaging_appointment_scheduled"
+    "omni_lead"
   );
 }
 
@@ -274,6 +264,7 @@ function buildInsightsParams(
     time_range: JSON.stringify({ since: from, until: to }),
     level,
     limit: level === "account" ? "1" : "500",
+    use_account_attribution_setting: "true",
     access_token: token,
   });
 }
@@ -336,6 +327,7 @@ export function useAdsPerformance(
       }
 
       setToken(cfg.token);
+      console.log("[bludash] querying date range:", { from, to });
 
       const rawCampaigns = await fetchAllPages<MetaCampaign>(
         `${BASE}/${cfg.adAccountId}/campaigns?fields=id,name,objective,status,effective_status&limit=200&access_token=${cfg.token}`
@@ -354,16 +346,24 @@ export function useAdsPerformance(
       const adInsightFields =
         `ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,${baseInsightFields}`;
 
-      const accountInsights = await fetchAllPages<MetaInsight>(
-        `${BASE}/${cfg.adAccountId}/insights?${buildInsightsParams(
-          baseInsightFields,
-          from,
-          to,
-          cfg.token,
-          "account"
-        ).toString()}`,
-        1
-      );
+      // REPLACE the account insight fetch block:
+let accountInsightData: AdInsight | null = null;
+try {
+  const url = `${BASE}/${cfg.adAccountId}/insights?fields=spend,reach,impressions,clicks,actions,action_values,account_currency,cpm,ctr&time_range=${encodeURIComponent(JSON.stringify({ since: from, until: to }))}&level=account&use_account_attribution_setting=true&access_token=${cfg.token}`;
+  const res = await fetch(url);
+  const json = await res.json();
+console.log("[bludash] account actions:", JSON.stringify(json.data?.[0]?.actions, null, 2));
+  if (json.error) throw new Error(json.error.message);
+  if (Array.isArray(json.data) && json.data[0]) {
+    accountInsightData = buildInsight(json.data[0]);
+    console.log("[bludash] account leads parsed:", accountInsightData.leads);
+  } else {
+    console.warn("[bludash] account insight returned empty data");
+  }
+} catch (e) {
+  console.error("[bludash] account insight fetch failed:", e);
+}
+
 
       const allInsights = await fetchAllPages<MetaInsight>(
         `${BASE}/${cfg.adAccountId}/insights?${buildInsightsParams(
@@ -483,7 +483,7 @@ export function useAdsPerformance(
 
       setAds(adsWithData);
       setCampaigns(groupedCampaigns);
-      setAccountInsight(accountInsights[0] ? buildInsight(accountInsights[0]) : null);
+setAccountInsight(accountInsightData);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to fetch ads performance");
       setAds([]);

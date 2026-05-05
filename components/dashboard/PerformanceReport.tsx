@@ -867,7 +867,9 @@ function buildPerformanceSummary(ads: Ad[], accountInsight: AdInsight | null = n
   const totalComments = accountInsight?.comments ?? summedComments;
   const totalShares = accountInsight?.shares ?? summedShares;
   const totalVideoViews = accountInsight?.videoViews ?? summedVideoViews;
-  const totalLeads = accountInsight?.leads ?? summedLeads;
+  const totalLeads = (accountInsight && accountInsight.leads > 0)
+  ? accountInsight.leads
+  : summedLeads;
   const totalLandingPageViews =
     accountInsight?.landingPageViews ?? summedLandingPageViews;
   const totalPostEngagements =
