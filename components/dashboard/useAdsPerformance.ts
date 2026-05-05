@@ -61,6 +61,7 @@ interface UseAdsPerformanceResult {
   error: string;
   ads: Ad[];
   campaigns: Campaign[];
+  accountInsight: AdInsight | null;
   token: string;
   refetch: () => Promise<void>;
 }
@@ -143,6 +144,12 @@ function getActionExact(actions: MetaAction[] | undefined, ...types: string[]): 
   return 0;
 }
 
+function getActionMax(actions: MetaAction[] | undefined, ...types: string[]): number {
+  if (!actions) return 0;
+
+  return Math.max(...types.map((type) => getActionExact(actions, type)), 0);
+}
+
 function sumActions(actions: MetaAction[] | undefined, ...types: string[]): number {
   if (!actions) return 0;
   let total = 0;
@@ -156,30 +163,128 @@ function sumActions(actions: MetaAction[] | undefined, ...types: string[]): numb
 function getLeadCount(actions: MetaAction[] | undefined): number {
   if (!actions) return 0;
 
-  const aggregateLeadCount = getActionExact(actions, "lead");
-  if (aggregateLeadCount > 0) {
-    return aggregateLeadCount;
-  }
+  // 1. Top-level "lead" is the most reliable — use it if present
+  const leadCount = getActionExact(actions, "lead");
+  if (leadCount > 0) return leadCount;
 
-  const omniLeadCount = getActionExact(actions, "omni_lead");
-  if (omniLeadCount > 0) {
-    return omniLeadCount;
-  }
+  // 2. "lead_grouped" is Meta's deduplicated aggregate — use it next
+  const leadGrouped = getActionExact(
+    actions,
+    "onsite_conversion.lead_grouped",
+    "leadgen_grouped"
+  );
+  if (leadGrouped > 0) return leadGrouped;
 
-  let total = 0;
-  const countedTypes = new Set<string>();
+  // 3. omni_lead as fallback
+  const omniLead = getActionExact(actions, "omni_lead");
+  if (omniLead > 0) return omniLead;
 
-  for (const action of actions) {
-    const actionType = String(action?.action_type || "").toLowerCase();
-    if (!actionType.includes("lead") || countedTypes.has(actionType)) {
-      continue;
-    }
+  // 4. Last resort: sum individual lead subtypes (no overlap with above)
+  return sumActions(
+    actions,
+    "onsite_conversion.lead",
+    "offsite_conversion.fb_pixel_lead",
+    "offsite_conversion.fb_pixel_custom.lead",
+    "onsite_conversion.messaging_lead",
+    "onsite_conversion.messaging_appointment_scheduled"
+  );
+}
 
-    countedTypes.add(actionType);
-    total += parseInt(String(action.value || "0"), 10);
-  }
+function buildInsight(ins: MetaInsight | undefined): AdInsight {
+  const spend = parseFloat(ins?.spend || "0");
+  const impressions = parseInt(ins?.impressions || "0", 10);
+  const clicks = parseInt(ins?.clicks || "0", 10);
+  const reach = parseInt(ins?.reach || "0", 10);
+  const leads = getLeadCount(ins?.actions);
+  const landingPageViews = getActionExact(ins?.actions, "landing_page_view");
+  const postEngagements = getActionExact(ins?.actions, "post_engagement");
 
-  return total;
+  const likes = getActionExact(
+    ins?.actions,
+    "onsite_conversion.post_net_like",
+    "like",
+    "post_reaction"
+  );
+
+  const comments = getActionExact(
+    ins?.actions,
+    "onsite_conversion.post_net_comment",
+    "comment",
+    "post_comment"
+  );
+
+  const shares = getActionExact(ins?.actions, "post", "share", "post_share");
+
+  const videoViews = getActionExact(
+    ins?.actions,
+    "video_view",
+    "video_play",
+    "video_watched"
+  );
+
+  const purchaseValue = sumActions(
+    ins?.action_values,
+    "offsite_conversion.fb_pixel_purchase",
+    "onsite_conversion.purchase",
+    "purchase"
+  );
+
+  const cpm =
+    ins?.cpm != null ? parseFloat(ins.cpm) : impressions > 0 ? (spend / impressions) * 1000 : 0;
+  const ctr =
+    ins?.ctr != null
+      ? parseFloat(ins.ctr)
+      : impressions > 0
+        ? (clicks / impressions) * 100
+        : 0;
+  const cpc = clicks > 0 ? spend / clicks : 0;
+  const cpl = leads > 0 ? spend / leads : 0;
+  const roas = spend > 0 ? purchaseValue / spend : 0;
+
+  return {
+    spend,
+    reach,
+    impressions,
+    clicks,
+    cpm,
+    ctr,
+    cpc,
+    likes,
+    comments,
+    shares,
+    videoViews,
+    leads,
+    cpl,
+    roas,
+    landingPageViews,
+    postEngagements,
+    currency: ins?.account_currency || "INR",
+  };
+}
+
+function buildInsightsParams(
+  fields: string,
+  from: string,
+  to: string,
+  token: string,
+  level: "account" | "ad"
+) {
+  return new URLSearchParams({
+    fields,
+    time_range: JSON.stringify({ since: from, until: to }),
+    level,
+    limit: level === "account" ? "1" : "500",
+    access_token: token,
+  });
+}
+
+function didAdRunInPeriod(ad: Ad) {
+  return (
+    ad.insights.impressions > 0 ||
+    ad.insights.spend > 0 ||
+    ad.insights.reach > 0 ||
+    ad.insights.clicks > 0
+  );
 }
 
 export function useAdsPerformance(
@@ -191,6 +296,7 @@ export function useAdsPerformance(
   const [error, setError] = useState("");
   const [ads, setAds] = useState<Ad[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [accountInsight, setAccountInsight] = useState<AdInsight | null>(null);
   const [token, setToken] = useState("");
 
   const fetchAllPages = useCallback(async <T,>(initialUrl: string, maxItems = 10000) => {
@@ -243,19 +349,30 @@ export function useAdsPerformance(
         `${BASE}/${cfg.adAccountId}/ads?fields=id,name,status,campaign_id,adset_id,creative{thumbnail_url,image_url,video_id},effective_status&limit=500&access_token=${cfg.token}`
       );
 
-      const insightsParams = new URLSearchParams({
-        fields:
-          "ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,spend,reach,impressions,clicks,inline_link_clicks,actions,action_values,account_currency,cpm,ctr,inline_link_click_ctr",
-        time_range: JSON.stringify({ since: from, until: to }),
-        level: "ad",
-        limit: "500",
-        access_token: cfg.token,
-        use_account_attribution_setting: "true",
-        action_attribution_windows: JSON.stringify(["7d_click", "1d_view"]),
-      });
+      const baseInsightFields =
+        "spend,reach,impressions,clicks,actions,action_values,account_currency,cpm,ctr";
+      const adInsightFields =
+        `ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,${baseInsightFields}`;
+
+      const accountInsights = await fetchAllPages<MetaInsight>(
+        `${BASE}/${cfg.adAccountId}/insights?${buildInsightsParams(
+          baseInsightFields,
+          from,
+          to,
+          cfg.token,
+          "account"
+        ).toString()}`,
+        1
+      );
 
       const allInsights = await fetchAllPages<MetaInsight>(
-        `${BASE}/${cfg.adAccountId}/insights?${insightsParams.toString()}`
+        `${BASE}/${cfg.adAccountId}/insights?${buildInsightsParams(
+          adInsightFields,
+          from,
+          to,
+          cfg.token,
+          "ad"
+        ).toString()}`
       );
 
       const periodInsights = allInsights.filter(
@@ -289,58 +406,7 @@ export function useAdsPerformance(
         const videoId = creative.video_id || null;
         const isVideo = !!videoId;
 
-        const spend = parseFloat(ins.spend || "0");
-        const impressions = parseInt(ins.impressions || "0", 10);
-        const clicks = parseInt(ins.inline_link_clicks || ins.clicks || "0", 10);
-        const reach = parseInt(ins.reach || "0", 10);
-
-        const likes = getActionExact(
-          ins.actions,
-          "onsite_conversion.post_net_like",
-          "like",
-          "post_reaction"
-        );
-
-        const comments = getActionExact(
-          ins.actions,
-          "onsite_conversion.post_net_comment",
-          "comment",
-          "post_comment"
-        );
-
-        const shares = getActionExact(ins.actions, "post", "share", "post_share");
-
-        const videoViews = getActionExact(
-          ins.actions,
-          "video_view",
-          "video_play",
-          "video_watched"
-        );
-
-        const leads = getLeadCount(ins.actions);
-
-        const landingPageViews = getActionExact(ins.actions, "landing_page_view");
-
-        const postEngagements = getActionExact(ins.actions, "post_engagement");
-
-        const cpm =
-          ins.cpm != null ? parseFloat(ins.cpm) : impressions > 0 ? (spend / impressions) * 1000 : 0;
-        const ctr =
-          ins.inline_link_click_ctr != null
-            ? parseFloat(ins.inline_link_click_ctr)
-            : impressions > 0
-              ? (clicks / impressions) * 100
-              : 0;
-        const cpc = clicks > 0 ? spend / clicks : 0;
-        const cpl = leads > 0 ? spend / leads : 0;
-
-        const purchaseValue = sumActions(
-          ins.action_values,
-          "offsite_conversion.fb_pixel_purchase",
-          "onsite_conversion.purchase",
-          "purchase"
-        );
-        const roas = spend > 0 ? purchaseValue / spend : 0;
+        const insight = buildInsight(ins);
 
         return {
           id: ins.ad_id,
@@ -356,35 +422,12 @@ export function useAdsPerformance(
           thumbnail,
           videoId,
           isVideo,
-          insights: {
-            spend,
-            reach,
-            impressions,
-            clicks,
-            cpm,
-            ctr,
-            cpc,
-            likes,
-            comments,
-            shares,
-            videoViews,
-            leads,
-            cpl,
-            roas,
-            landingPageViews,
-            postEngagements,
-            currency: ins.account_currency || "INR",
-          },
+          insights: insight,
         };
       });
 
       const adsWithData = builtAds.filter(
-        (ad) =>
-          ad.insights.impressions > 0 ||
-          ad.insights.spend > 0 ||
-          ad.insights.leads > 0 ||
-          ad.insights.reach > 0 ||
-          ad.insights.clicks > 0
+        (ad) => didAdRunInPeriod(ad) || ad.insights.leads > 0
       );
 
       const insightCampaignIds = new Set(adsWithData.map((ad) => ad.campaignId));
@@ -440,10 +483,12 @@ export function useAdsPerformance(
 
       setAds(adsWithData);
       setCampaigns(groupedCampaigns);
+      setAccountInsight(accountInsights[0] ? buildInsight(accountInsights[0]) : null);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to fetch ads performance");
       setAds([]);
       setCampaigns([]);
+      setAccountInsight(null);
     } finally {
       setLoading(false);
     }
@@ -462,6 +507,7 @@ export function useAdsPerformance(
     error,
     ads,
     campaigns,
+    accountInsight,
     token,
     refetch: fetchPerformance,
   };

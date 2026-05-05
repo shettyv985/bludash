@@ -6,6 +6,7 @@ import AdModal from "./AdModal";
 import {
   useAdsPerformance,
   type Ad,
+  type AdInsight,
   type Campaign,
 } from "./useAdsPerformance";
 import { useManusReport } from "./useManusReport";
@@ -836,18 +837,41 @@ type PerformanceSummary = {
   totalAds: number;
 };
 
-function buildPerformanceSummary(ads: Ad[]): PerformanceSummary {
-  const totalSpend = ads.reduce((s, a) => s + a.insights.spend, 0);
-  const totalReach = ads.reduce((s, a) => s + a.insights.reach, 0);
-  const totalImpressions = ads.reduce((s, a) => s + a.insights.impressions, 0);
-  const totalClicks = ads.reduce((s, a) => s + a.insights.clicks, 0);
-  const totalLikes = ads.reduce((s, a) => s + a.insights.likes, 0);
-  const totalComments = ads.reduce((s, a) => s + a.insights.comments, 0);
-  const totalShares = ads.reduce((s, a) => s + a.insights.shares, 0);
-  const totalVideoViews = ads.reduce((s, a) => s + a.insights.videoViews, 0);
-  const totalLeads = ads.reduce((s, a) => s + a.insights.leads, 0);
-  const totalLandingPageViews = ads.reduce((s, a) => s + a.insights.landingPageViews, 0);
-  const totalPostEngagements = ads.reduce((s, a) => s + a.insights.postEngagements, 0);
+function didAdRunInPeriod(ad: Ad) {
+  return (
+    ad.insights.impressions > 0 ||
+    ad.insights.spend > 0 ||
+    ad.insights.reach > 0 ||
+    ad.insights.clicks > 0
+  );
+}
+
+function buildPerformanceSummary(ads: Ad[], accountInsight: AdInsight | null = null): PerformanceSummary {
+  const summedSpend = ads.reduce((s, a) => s + a.insights.spend, 0);
+  const summedReach = ads.reduce((s, a) => s + a.insights.reach, 0);
+  const summedImpressions = ads.reduce((s, a) => s + a.insights.impressions, 0);
+  const summedClicks = ads.reduce((s, a) => s + a.insights.clicks, 0);
+  const summedLikes = ads.reduce((s, a) => s + a.insights.likes, 0);
+  const summedComments = ads.reduce((s, a) => s + a.insights.comments, 0);
+  const summedShares = ads.reduce((s, a) => s + a.insights.shares, 0);
+  const summedVideoViews = ads.reduce((s, a) => s + a.insights.videoViews, 0);
+  const summedLeads = ads.reduce((s, a) => s + a.insights.leads, 0);
+  const summedLandingPageViews = ads.reduce((s, a) => s + a.insights.landingPageViews, 0);
+  const summedPostEngagements = ads.reduce((s, a) => s + a.insights.postEngagements, 0);
+
+  const totalSpend = accountInsight?.spend ?? summedSpend;
+  const totalReach = accountInsight?.reach ?? summedReach;
+  const totalImpressions = accountInsight?.impressions ?? summedImpressions;
+  const totalClicks = accountInsight?.clicks ?? summedClicks;
+  const totalLikes = accountInsight?.likes ?? summedLikes;
+  const totalComments = accountInsight?.comments ?? summedComments;
+  const totalShares = accountInsight?.shares ?? summedShares;
+  const totalVideoViews = accountInsight?.videoViews ?? summedVideoViews;
+  const totalLeads = accountInsight?.leads ?? summedLeads;
+  const totalLandingPageViews =
+    accountInsight?.landingPageViews ?? summedLandingPageViews;
+  const totalPostEngagements =
+    accountInsight?.postEngagements ?? summedPostEngagements;
 
   return {
     totalSpend,
@@ -861,12 +885,14 @@ function buildPerformanceSummary(ads: Ad[]): PerformanceSummary {
     totalLeads,
     totalLandingPageViews,
     totalPostEngagements,
-    overallCTR: totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0,
-    overallCPM: totalImpressions > 0 ? (totalSpend / totalImpressions) * 1000 : 0,
-    overallCPC: totalClicks > 0 ? totalSpend / totalClicks : 0,
+    overallCTR:
+      accountInsight?.ctr ?? (totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0),
+    overallCPM:
+      accountInsight?.cpm ?? (totalImpressions > 0 ? (totalSpend / totalImpressions) * 1000 : 0),
+    overallCPC: accountInsight?.cpc ?? (totalClicks > 0 ? totalSpend / totalClicks : 0),
     overallCPL: totalLeads > 0 ? totalSpend / totalLeads : 0,
     activeAds: ads.filter((a) => a.status === "ACTIVE").length,
-    adsInPeriod: ads.length,
+    adsInPeriod: ads.filter(didAdRunInPeriod).length,
     totalAds: ads.length,
   };
 }
@@ -926,10 +952,14 @@ export default function PerformanceReport({ client, from, to, dark, onBack }: Pr
 
   const comparisonRange = getPreviousMonthComparisonRange(from, to);
 
-  const { loading, error, ads: allAds, campaigns, token: cfgToken } =
+  const { loading, error, ads: allAds, campaigns, accountInsight, token: cfgToken } =
     useAdsPerformance(client, from, to);
 
-  const { loading: previousMonthLoading, ads: comparisonAds } =
+  const {
+    loading: previousMonthLoading,
+    ads: comparisonAds,
+    accountInsight: comparisonAccountInsight,
+  } =
     useAdsPerformance(client, comparisonRange.from, comparisonRange.to);
 
 
@@ -940,7 +970,7 @@ export default function PerformanceReport({ client, from, to, dark, onBack }: Pr
 // ── Stage 2: As soon as Manus JSON analysis is done, kick off HTML build ──
 useEffect(() => {
   if (manusState.status === "done" && manusState.reportData) {
-    const payload = buildReportPayload(allAds, campaigns, client, from, to);
+    const payload = buildReportPayload(allAds, campaigns, client, from, to, accountInsight);
     setBuilding("Manus is now building your HTML report…");
     generateReportPDF(
       payload,
@@ -1003,8 +1033,8 @@ useEffect(() => {
       return sortDir === "desc" ? bVal - aVal : aVal - bVal;
     });
 
-  const summary = buildPerformanceSummary(allAds);
-const comparisonSummary = buildPerformanceSummary(comparisonAds);
+  const summary = buildPerformanceSummary(allAds, accountInsight);
+const comparisonSummary = buildPerformanceSummary(comparisonAds, comparisonAccountInsight);
 
 const totalSpend = summary.totalSpend;
 const totalReach = summary.totalReach;
@@ -1193,7 +1223,7 @@ const filteredCampaigns = filterCampaignsByAds(campaigns, filteredAds);
 
           <button
             onClick={async () => {
-              const payload = buildReportPayload(allAds, campaigns, client, from, to);
+              const payload = buildReportPayload(allAds, campaigns, client, from, to, accountInsight);
               generateReport(payload);
             }}
             disabled={isGeneratingManus}

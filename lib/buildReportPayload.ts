@@ -3,7 +3,7 @@
 // Manus receives this — it never needs to fetch, calculate, or format.
 // All heavy lifting is done here so Manus only writes insights.
 
-import type { Ad, Campaign } from "@/components/dashboard/useAdsPerformance";
+import type { Ad, AdInsight, Campaign } from "@/components/dashboard/useAdsPerformance";
 
 // ─── Industry benchmarks for Meta Ads (India market) ─────────────────────────
 const BENCHMARKS = {
@@ -180,24 +180,37 @@ export function buildReportPayload(
   campaigns: Campaign[],
   client: string,
   from: string,
-  to: string
+  to: string,
+  accountInsight: AdInsight | null = null
 ): ReportPayload {
   // ── Totals ────────────────────────────────────────────────────────────────
-  const totalSpend       = allAds.reduce((s, a) => s + a.insights.spend, 0);
-  const totalReach       = allAds.reduce((s, a) => s + a.insights.reach, 0);
-  const totalImpressions = allAds.reduce((s, a) => s + a.insights.impressions, 0);
-  const totalClicks      = allAds.reduce((s, a) => s + a.insights.clicks, 0);
-  const totalLeads       = allAds.reduce((s, a) => s + a.insights.leads, 0);
-  const totalLikes       = allAds.reduce((s, a) => s + a.insights.likes, 0);
-  const totalComments    = allAds.reduce((s, a) => s + a.insights.comments, 0);
-  const totalShares      = allAds.reduce((s, a) => s + a.insights.shares, 0);
-  const totalVideoViews  = allAds.reduce((s, a) => s + a.insights.videoViews, 0);
-  const totalLPViews     = allAds.reduce((s, a) => s + a.insights.landingPageViews, 0);
-  const totalEngagements = allAds.reduce((s, a) => s + a.insights.postEngagements, 0);
+  const summedSpend       = allAds.reduce((s, a) => s + a.insights.spend, 0);
+  const summedReach       = allAds.reduce((s, a) => s + a.insights.reach, 0);
+  const summedImpressions = allAds.reduce((s, a) => s + a.insights.impressions, 0);
+  const summedClicks      = allAds.reduce((s, a) => s + a.insights.clicks, 0);
+  const summedLeads       = allAds.reduce((s, a) => s + a.insights.leads, 0);
+  const summedLikes       = allAds.reduce((s, a) => s + a.insights.likes, 0);
+  const summedComments    = allAds.reduce((s, a) => s + a.insights.comments, 0);
+  const summedShares      = allAds.reduce((s, a) => s + a.insights.shares, 0);
+  const summedVideoViews  = allAds.reduce((s, a) => s + a.insights.videoViews, 0);
+  const summedLPViews     = allAds.reduce((s, a) => s + a.insights.landingPageViews, 0);
+  const summedEngagements = allAds.reduce((s, a) => s + a.insights.postEngagements, 0);
 
-  const overallCTR = pct(totalClicks, totalImpressions);
-  const overallCPM = totalImpressions > 0 ? round((totalSpend / totalImpressions) * 1000) : 0;
-  const overallCPC = totalClicks > 0 ? round(totalSpend / totalClicks) : 0;
+  const totalSpend       = accountInsight?.spend ?? summedSpend;
+  const totalReach       = accountInsight?.reach ?? summedReach;
+  const totalImpressions = accountInsight?.impressions ?? summedImpressions;
+  const totalClicks      = accountInsight?.clicks ?? summedClicks;
+  const totalLeads       = accountInsight?.leads ?? summedLeads;
+  const totalLikes       = accountInsight?.likes ?? summedLikes;
+  const totalComments    = accountInsight?.comments ?? summedComments;
+  const totalShares      = accountInsight?.shares ?? summedShares;
+  const totalVideoViews  = accountInsight?.videoViews ?? summedVideoViews;
+  const totalLPViews     = accountInsight?.landingPageViews ?? summedLPViews;
+  const totalEngagements = accountInsight?.postEngagements ?? summedEngagements;
+
+  const overallCTR = accountInsight?.ctr != null ? round(accountInsight.ctr) : pct(totalClicks, totalImpressions);
+  const overallCPM = accountInsight?.cpm != null ? round(accountInsight.cpm) : totalImpressions > 0 ? round((totalSpend / totalImpressions) * 1000) : 0;
+  const overallCPC = accountInsight?.cpc != null ? round(accountInsight.cpc) : totalClicks > 0 ? round(totalSpend / totalClicks) : 0;
   const overallCPL = totalLeads > 0 ? round(totalSpend / totalLeads) : 0;
 
   // ── Per-ad analysis ───────────────────────────────────────────────────────
