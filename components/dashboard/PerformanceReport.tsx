@@ -767,7 +767,7 @@ async function exportPDF(
   });
 
   const finalY =
-    (doc as jsPDF & { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? y + 10;
+    (doc as typeof jsPDF & { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? y + 10;
   const nextY = finalY + 10;
 
   doc.setFillColor(29, 78, 216);
