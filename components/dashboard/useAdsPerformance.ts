@@ -84,6 +84,28 @@ function sumActions(actions: any[], ...types: string[]): number {
   return total;
 }
 
+function getLeadCount(actions: any[]): number {
+  if (!actions) return 0;
+
+  const aggregateLeadCount = getActionExact(actions, "lead");
+  if (aggregateLeadCount > 0) {
+    return aggregateLeadCount;
+  }
+
+  const onsiteLeadCount =
+    getActionExact(actions, "onsite_conversion.lead") ||
+    getActionExact(actions, "onsite_conversion.lead_grouped", "leadgen_grouped");
+
+  const offsiteLeadCount = getActionExact(actions, "offsite_conversion.fb_pixel_lead");
+  const omniLeadCount = getActionExact(actions, "omni_lead");
+
+  if (omniLeadCount > 0) {
+    return omniLeadCount;
+  }
+
+  return onsiteLeadCount + offsiteLeadCount;
+}
+
 export function useAdsPerformance(
   client: string,
   from: string,
@@ -151,7 +173,7 @@ export function useAdsPerformance(
 
       const insightsParams = new URLSearchParams({
         fields:
-          "ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,spend,reach,impressions,clicks,actions,action_values,account_currency,cpm,ctr",
+          "ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,spend,reach,impressions,clicks,inline_link_clicks,actions,action_values,account_currency,cpm,ctr,inline_link_click_ctr",
         time_range: JSON.stringify({ since: from, until: to }),
         level: "ad",
         limit: "500",
@@ -187,7 +209,7 @@ export function useAdsPerformance(
 
         const spend = parseFloat(ins.spend || "0");
         const impressions = parseInt(ins.impressions || "0", 10);
-        const clicks = parseInt(ins.clicks || "0", 10);
+        const clicks = parseInt(ins.inline_link_clicks || ins.clicks || "0", 10);
         const reach = parseInt(ins.reach || "0", 10);
 
         const likes = getActionExact(
@@ -213,7 +235,7 @@ export function useAdsPerformance(
           "video_watched"
         );
 
-        const leads = getActionExact(ins.actions, "lead");
+        const leads = getLeadCount(ins.actions);
 
         const landingPageViews = getActionExact(ins.actions, "landing_page_view");
 
@@ -222,7 +244,11 @@ export function useAdsPerformance(
         const cpm =
           ins.cpm != null ? parseFloat(ins.cpm) : impressions > 0 ? (spend / impressions) * 1000 : 0;
         const ctr =
-          ins.ctr != null ? parseFloat(ins.ctr) : impressions > 0 ? (clicks / impressions) * 100 : 0;
+          ins.inline_link_click_ctr != null
+            ? parseFloat(ins.inline_link_click_ctr)
+            : impressions > 0
+              ? (clicks / impressions) * 100
+              : 0;
         const cpc = clicks > 0 ? spend / clicks : 0;
         const cpl = leads > 0 ? spend / leads : 0;
 

@@ -656,6 +656,7 @@ async function exportPDF(
     overallCPM: number;
     overallCPC: number;
     activeAds: number;
+    adsInPeriod: number;
     totalLeads: number;
     overallCPL: number;
   },
@@ -697,6 +698,7 @@ async function exportPDF(
     { label: "TOTAL LEADS", value: String(summary.totalLeads) },
     { label: "CPL", value: summary.overallCPL > 0 ? fmtMoney(summary.overallCPL) : "—" },
     { label: "ACTIVE ADS", value: String(summary.activeAds) },
+    { label: "ADS IN PERIOD", value: String(summary.adsInPeriod) },
   ];
 
   let y = 38;
@@ -764,7 +766,8 @@ async function exportPDF(
     margin: { left: 10, right: 10 },
   });
 
-  const finalY = (doc as any).lastAutoTable?.finalY ?? y + 10;
+  const finalY =
+    (doc as jsPDF & { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? y + 10;
   const nextY = finalY + 10;
 
   doc.setFillColor(29, 78, 216);
@@ -829,6 +832,7 @@ type PerformanceSummary = {
   overallCPC: number;
   overallCPL: number;
   activeAds: number;
+  adsInPeriod: number;
   totalAds: number;
 };
 
@@ -862,8 +866,25 @@ function buildPerformanceSummary(ads: Ad[]): PerformanceSummary {
     overallCPC: totalClicks > 0 ? totalSpend / totalClicks : 0,
     overallCPL: totalLeads > 0 ? totalSpend / totalLeads : 0,
     activeAds: ads.filter((a) => a.status === "ACTIVE").length,
+    adsInPeriod: ads.length,
     totalAds: ads.length,
   };
+}
+
+function filterCampaignsByAds(campaigns: Campaign[], allowedAds: Ad[]) {
+  const allowedIds = new Set(allowedAds.map((ad) => ad.id));
+
+  return campaigns
+    .map((campaign) => ({
+      ...campaign,
+      adSets: campaign.adSets
+        .map((adSet) => ({
+          ...adSet,
+          ads: adSet.ads.filter((ad) => allowedIds.has(ad.id)),
+        }))
+        .filter((adSet) => adSet.ads.length > 0),
+    }))
+    .filter((campaign) => campaign.adSets.length > 0);
 }
 
 function formatDelta(current: number, previous: number) {
@@ -1001,6 +1022,8 @@ const overallCPM = summary.overallCPM;
 const overallCPC = summary.overallCPC;
 const overallCPL = summary.overallCPL;
 const activeAds = summary.activeAds;
+const adsInPeriod = summary.adsInPeriod;
+const filteredCampaigns = filterCampaignsByAds(campaigns, filteredAds);
 
   const fromLabel = new Date(from).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
   const toLabel = new Date(to).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
@@ -1150,7 +1173,7 @@ const activeAds = summary.activeAds;
           </button>
 
           <button
-            onClick={async () => { setExportingPDF(true); await exportPDF(filteredAds, campaigns, summary, client, from, to); setExportingPDF(false); }}
+            onClick={async () => { setExportingPDF(true); await exportPDF(filteredAds, filteredCampaigns, summary, client, from, to); setExportingPDF(false); }}
             disabled={exportingPDF}
             className={`flex items-center gap-1.5 text-[12px] px-3 py-1.5 rounded-lg border font-medium transition-all disabled:opacity-40 ${dark ? "border-blue-500/30 text-blue-400 hover:bg-blue-500/10" : "border-blue-600/30 text-blue-700 hover:bg-blue-50"}`}
           >
@@ -1321,6 +1344,18 @@ const activeAds = summary.activeAds;
     accent={dark ? "text-blue-400" : "text-blue-600"}
     dark={dark}
     icon={<svg {...iconProps} className={iconCls}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg>}
+  />
+  <SummaryCard
+    label="Ads Ran In Period"
+    value={String(adsInPeriod)}
+    sub={
+      previousMonthLoading
+        ? "Ads with spend or impressions in this range"
+        : `${comparisonSummary.adsInPeriod} last month â€¢ ${formatDelta(adsInPeriod, comparisonSummary.adsInPeriod)}`
+    }
+    accent={dark ? "text-cyan-400" : "text-cyan-600"}
+    dark={dark}
+    icon={<svg {...iconProps} className={iconCls}><path d="M3 12h18" /><path d="M12 3v18" /></svg>}
   />
 </div>
 
@@ -1515,14 +1550,14 @@ const activeAds = summary.activeAds;
         </div>
 
         <p className={`text-[11px] ${dark ? "text-white/25" : "text-slate-400"}`}>
-          Showing {filteredAds.length.toLocaleString()} ads
+          Showing {filteredAds.length.toLocaleString()} ads that ran in the selected period
         </p>
       </div>
 
       {viewMode === "flat" ? (
         <FlatTable ads={filteredAds} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} dark={dark} onRowClick={(ad) => setSelectedAd(ad)} />
       ) : (
-        <GroupedView campaigns={campaigns} dark={dark} onAdClick={(ad) => setSelectedAd(ad)} />
+        <GroupedView campaigns={filteredCampaigns} dark={dark} onAdClick={(ad) => setSelectedAd(ad)} />
       )}
 
       {allAds.length === 0 && (
