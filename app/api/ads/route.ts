@@ -32,6 +32,13 @@ const CLIENT_CONFIG: Record<string, ClientConfig> = {
     fbPageId: process.env.ABADBuilders_FB_PAGE_ID || "",
     igUserId: process.env.ABADBuilders_IG_USER_ID || "",
   },
+  Zeiq: {
+    token: process.env.Zeiq_TOKEN || "",
+    adAccountId: process.env.Zeiq_AD_ACCOUNT_ID || "",
+    fbPageId: process.env.Zeiq_FB_PAGE_ID || "",
+    igUserId: process.env.Zeiq_IG_USER_ID || "",
+  },
+
 };
 
 export async function GET(req: NextRequest) {

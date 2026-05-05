@@ -20,6 +20,11 @@ export const CLIENTS = {
     name: "ABAD Builders",
     clientKey: "ABADBuilders",
   },
+  zeiq123: {
+    password: "zeiq@123",
+    name: "Zeiq",
+    clientKey: "Zeiq",
+  },
   blu123: {
     password: "blu@123",
     name: "BLUSTEAK",
@@ -34,4 +39,5 @@ export const ALL_CLIENTS = [
   { label: "Chakolas", value: "CHAKOLAS" },
   { label: "Halwa Haweli", value: "HALWAHAWELI" },
   { label: "ABAD Builders", value: "ABADBuilders" },
+  { label: "Zeiq", value: "Zeiq" },
 ];
