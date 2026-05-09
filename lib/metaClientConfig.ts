@@ -11,18 +11,33 @@ export type MetaClientConfig = {
 const CLIENT_NAMES: Record<string, string> = {
   ABADBuilders: "ABAD Builders",
   AngelLungies: "Angel Lungies",
-  GEOJIT: "GEOJIT",
+  BluFunnel_CRM: "BluFunnel CRM",
+  Blusteak_Academy: "Blusteak Academy",
+  Blusteak_Media: "Blusteak Media",
   CHAKOLAS: "CHAKOLAS",
+  CnC: "CnC",
+  GEOJIT: "GEOJIT",
   HALWAHAWELI: "HALWA HAWELI",
+  Kendamil_Qatar: "Kendamil Qatar",
+  MemoryTrain: "Memory Train",
+  SpacesECO_Clean: "Spaces ECO Clean",
   Zeiq: "Zeiq Consultants",
+  
 };
 
 const ENV_PREFIXES = [
   "ABADBuilders",
   "AngelLungies",
-  "GEOJIT",
+  "BluFunnel_CRM",
+  "Blusteak_Academy",
+  "Blusteak_Media",
   "CHAKOLAS",
+  "CnC",
+  "GEOJIT",
   "HALWAHAWELI",
+  "Kendamil_Qatar",
+  "MemoryTrain",
+  "SpacesECO_Clean",
   "Zeiq",
 ] as const;
 
