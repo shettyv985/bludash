@@ -5,24 +5,36 @@ import type { SocialReportPayload } from "@/lib/buildSocialReportPayload";
 const MANUS_BASE = "https://api.manus.ai/v2";
 
 function buildPrompt(payload: SocialReportPayload): string {
-  // Limit posts sent to Manus to top 30 by engagement rate to stay within context limits
+  // Limit posts sent to Manus to the strongest candidates while keeping room for diagnosis.
   // Full post list is still in payload.posts but rankings already surface the key ones
- // Top 30 by engagement for deep analysis focus
+ // Top posts by engagement for deep analysis focus
 const postsForAnalysis = [...payload.posts]
   .sort((a, b) => b.engagementRate - a.engagementRate)
-  .slice(0, 30);
+  .slice(0, 40);
 
-// Bottom 10 by engagement for red flag detection (separate so Manus sees both ends)
+// Bottom posts by engagement for red flag detection (separate so Manus sees both ends)
 const worstPosts = [...payload.posts]
-  .filter(p => p.totalReach > 100) // only meaningful reach
+  .filter(p => p.totalReach > 50) // only meaningful reach
   .sort((a, b) => a.engagementRate - b.engagementRate)
-  .slice(0, 10);
+  .slice(0, 20);
 
 // All boosted posts regardless of ranking (always include for spend analysis)
 const boostedForAnalysis = payload.posts.filter(p => p.isBoosted);
 
 // All reels regardless of ranking (always include for hook analysis)
 const reelsForAnalysis = payload.posts.filter(p => p.type === "REEL");
+
+// Posts that need decision-making: paid, high reach, or high opportunity cost.
+const attentionRequiredPosts = [...payload.posts]
+  .filter((p: any) => p.totalReach > 100 || p.amountSpent > 0 || p.isBoosted)
+  .sort((a: any, b: any) => {
+    const aSpend = Number(a.amountSpent || 0);
+    const bSpend = Number(b.amountSpent || 0);
+    const aRisk = (a.totalReach || 0) * Math.max(0, 3 - (a.engagementRate || 0)) + aSpend * 20;
+    const bRisk = (b.totalReach || 0) * Math.max(0, 3 - (b.engagementRate || 0)) + bSpend * 20;
+    return bRisk - aRisk;
+  })
+  .slice(0, 20);
 
   const comparisonBlock = payload.comparison.available
     ? `\n\nPREVIOUS PERIOD COMPARISON (${payload.comparison.periodLabel}):\n${JSON.stringify(payload.comparison, null, 2)}`
@@ -39,6 +51,14 @@ Every insight must:
 - Compare against benchmarks (Engagement rate good ≥3%, ok ≥1%)
 - For Reels: reference skip rate (good ≤25%, ok ≤50%, bad >50%) AND avg watch time
 - For MoM comparisons: use the comparison block to state exact % changes and call out if a trend is improving or declining
+
+DEPTH MANDATE:
+- Never stop at "worked" or "did not work". Diagnose the mechanism: hook, format, emotion, offer, timing, visual, caption, audience fit, platform fit, paid distribution, or cultural relevance.
+- Separate organic success from paid-inflated success. If reach is high because of boosting but engagement is weak, say that paid reach is masking weak content.
+- Every weak post needs a root-cause label: Weak Hook, Weak Visual, Weak Caption, Wrong Format, Wrong Platform, Wrong Audience, Spend Mismatch, Low Save Intent, Low Share Intent, or Creative Fatigue.
+- Every winning post needs a replication formula: what to repeat, where to use it, what not to change, and which metric should improve.
+- Every recommendation must read like an execution instruction: what to change, where to change it, how to execute it, and the expected metric movement.
+- Flag four categories clearly: SCALE, FIX, STOP, and TEST.
 
 REEL HOOK QUALITY GUIDE (use in your analysis):
 - Skip rate ≤20% = Exceptional hook — opening 3 seconds is highly compelling
@@ -68,7 +88,17 @@ Return this exact JSON schema (all fields required, do not add extra fields):
     "biggestProblem": "<The single most critical issue across both platforms, with exact data>",
     "biggestOpportunity": "<The single biggest untapped opportunity with estimated impact>",
     "contentHealthScore": "<e.g. '41/100 — only 3 of 12 posts exceeded 3% engagement rate'>",
-    "audienceGrowthScore": "<e.g. '67/100 — net follower growth is positive but slowing'>"
+    "audienceGrowthScore": "<e.g. '67/100 — net follower growth is positive but slowing'>",
+    "rootCause": "<The underlying strategic reason the account is underperforming or winning. Tie it to post evidence, platform behavior, and audience response.>",
+    "whereTheAccountIsLacking": [
+      {
+        "area": "<Hook|Creative|Caption|Format Mix|Boosting|Audience Growth|Posting Cadence|Platform Fit>",
+        "severity": "<High|Medium|Low>",
+        "evidence": "<Exact post/metric proof>",
+        "whyItMatters": "<Business/social impact>",
+        "fix": "<Exact action to correct it>"
+      }
+    ]
   },
   "periodComparison": {
     "available": <true|false>,
@@ -108,6 +138,15 @@ Return this exact JSON schema (all fields required, do not add extra fields):
       "scalingPotential": "<High|Medium|Low with reason>"
     }
   ],
+  "whyItWorkedPatterns": [
+    {
+      "pattern": "<Repeatable success pattern>",
+      "workedBecause": "<Deep reason this pattern created attention, engagement, saves, shares, clicks, or follower growth>",
+      "proofPosts": ["<caption + platform + key metric>", "<caption + platform + key metric>"],
+      "howToRepeat": "<Specific repeatable content formula>",
+      "expectedMetricLift": "<Expected measurable lift>"
+    }
+  ],
   "whatIsNotWorking": [
     {
       "point": "<Short title>",
@@ -116,6 +155,29 @@ Return this exact JSON schema (all fields required, do not add extra fields):
       "evidence": "<Exact metrics showing failure, including skip rate and watch time for Reels>",
       "recommendation": "<Exact fix>",
       "verdict": "<Stop This Format|Fix The Hook|Fix The Caption|Fix The Visual|Wrong Platform>"
+    }
+  ],
+  "whyItDidNotWorkPatterns": [
+    {
+      "pattern": "<Repeatable failure pattern>",
+      "failedBecause": "<Deep reason this pattern lost attention or failed algorithm/audience fit>",
+      "proofPosts": ["<caption + platform + key metric>", "<caption + platform + key metric>"],
+      "whatToStop": "<Exact behavior, format, hook, caption, or boosting choice to stop>",
+      "replacement": "<Exact replacement formula>"
+    }
+  ],
+  "postLevelActionMap": [
+    {
+      "platform": "<FB|IG>",
+      "postCaption": "<first 80 chars>",
+      "postType": "<REEL|IMAGE|CAROUSEL>",
+      "date": "<date>",
+      "classification": "<Scale|Fix|Stop|Test|Boost|Do Not Boost>",
+      "workedOrFailed": "<Worked|Failed|Mixed>",
+      "why": "<Exact root-cause diagnosis using the metrics>",
+      "action": "<Specific next action for this exact post or its format>",
+      "priority": "<High|Medium|Low>",
+      "metricToWatch": "<Engagement Rate|Reach|Saves|Shares|Skip Rate|CTR|Follower Growth>"
     }
   ],
   "contentDeepDive": {
@@ -197,6 +259,38 @@ Return this exact JSON schema (all fields required, do not add extra fields):
       "timeToImpact": "<24hrs|3-5 days|1-2 weeks>"
     }
   ],
+  "stopStartContinue": {
+    "stop": [
+      {
+        "item": "<What to stop doing>",
+        "why": "<Exact evidence and failure reason>",
+        "replacement": "<What to do instead>"
+      }
+    ],
+    "start": [
+      {
+        "item": "<What to start doing>",
+        "why": "<Opportunity evidence>",
+        "firstStep": "<What to do tomorrow>"
+      }
+    ],
+    "continue": [
+      {
+        "item": "<What to keep doing>",
+        "why": "<Exact evidence it works>",
+        "scalePlan": "<How to scale it>"
+      }
+    ]
+  },
+  "experimentsToRun": [
+    {
+      "experiment": "<Specific A/B or content experiment>",
+      "hypothesis": "<Why this should work based on the data>",
+      "execution": "<Exact creative/caption/format instructions>",
+      "successMetric": "<Metric and target>",
+      "duration": "<1 week|2 weeks|30 days>"
+    }
+  ],
   "thirtyDayPlan": [
     {
       "week": "Week 1",
@@ -246,11 +340,14 @@ ${JSON.stringify({
   contentMix: payload.contentMix,
 }, null, 2)}
 
-TOP POSTS BY ENGAGEMENT (top 30):
+TOP POSTS BY ENGAGEMENT (top 40):
 ${JSON.stringify(postsForAnalysis, null, 2)}
 
-WORST POSTS BY ENGAGEMENT (bottom 10, reach > 100):
+WORST POSTS BY ENGAGEMENT (bottom 20, reach > 50):
 ${JSON.stringify(worstPosts, null, 2)}
+
+ATTENTION REQUIRED POSTS (high reach, paid spend, low engagement risk, or boosted):
+${JSON.stringify(attentionRequiredPosts, null, 2)}
 
 ALL BOOSTED POSTS (complete spend data):
 ${JSON.stringify(boostedForAnalysis, null, 2)}

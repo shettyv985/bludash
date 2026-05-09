@@ -64,6 +64,14 @@ EVERY insight must follow this formula:
   PROOF → reference the specific post caption (first 60 chars)
   ACTION → concrete next step with expected measurable outcome
 
+Strategic decision layer:
+  SCALE = what worked, why it worked, and how to repeat it
+  FIX = what had potential but needs a specific creative/caption/hook change
+  STOP = what wasted reach, attention, or ad spend and should be removed
+  TEST = what experiment should run next with a success metric
+
+When reportData includes rootCause, whereTheAccountIsLacking, whyItWorkedPatterns, whyItDidNotWorkPatterns, postLevelActionMap, stopStartContinue, or experimentsToRun, these are priority content. Render them clearly and do not hide them in small text.
+
 BANNED phrases (using any = failure):
   "engagement is low" → must say WHY it's low and WHICH posts prove it
   "content is not resonating" → must say WHAT specifically is failing and WHY
@@ -107,6 +115,8 @@ Full-width gradient banner.
 - 2 animated progress bars (CSS animation, fills on load):
   "Content Health Score" — parse number from reportData.accountDiagnosis.contentHealthScore. E.g. "18/100" → fill to 18%. Color: <40=red, <70=amber, ≥70=emerald.
   "Audience Growth Score" — parse number from reportData.accountDiagnosis.audienceGrowthScore.
+- If reportData.accountDiagnosis.rootCause exists: add a full-width "Root Cause" card below the scores. Render it in full and include exact proof metrics.
+- If reportData.accountDiagnosis.whereTheAccountIsLacking exists: render a "Where We Are Lacking" grid. Each card must show Area, Severity, Evidence, Why It Matters, and Fix. Severity High=red, Medium=amber, Low=slate.
 
 ━━ SECTION 3: KEY TAKEAWAYS ━━
 5 numbered cards in a grid (2+2+1 layout). Each card:
@@ -217,6 +227,10 @@ Card with 2px emerald left border, slight emerald tint bg:
   "How to Scale This:" render recommendation in FULL — specific, actionable, includes expected metric outcomes
   Scaling Potential badge: High=emerald, Medium=amber, Low=slate with explanation of WHY that scaling potential rating
 
+Below those cards, if reportData.whyItWorkedPatterns exists, render "Winning Patterns To Repeat" as a 3-col grid:
+  Pattern title | Worked Because | Proof Posts | How To Repeat | Expected Metric Lift.
+This must clearly explain exactly what worked and why it worked.
+
 ━━ SECTION 9: WHAT'S NOT WORKING ━━
 Section header "❌ What's Not Working — Stop or Fix These Now" with red accent.
 For EACH item in reportData.whatIsNotWorking:
@@ -227,6 +241,10 @@ Card with 2px red left border, slight red tint bg:
   Evidence pills row in red
   "The Fix:" render recommendation in FULL with specific steps
   "If You Don't Fix This:" — one sentence on the downstream consequence of ignoring this
+
+Below those cards, if reportData.whyItDidNotWorkPatterns exists, render "Failure Patterns To Eliminate" as red/amber cards:
+  Pattern | Failed Because | Proof Posts | What To Stop | Replacement.
+This must clearly explain exactly what did not work and why it did not work.
 
 ━━ SECTION 10: PLATFORM COMPARISON ━━
 2-col side-by-side card.
@@ -301,6 +319,21 @@ Quick Wins section below:
 Compact emerald cards, 3-col grid.
 For EACH item in reportData.quickWins:
   Action in bold | Expected Impact in emerald | "How To:" render howTo in FULL as numbered steps
+
+Post-Level Action Map:
+If reportData.postLevelActionMap exists, render a full-width table titled "Exact Post-Level Decisions".
+Columns: Platform | Post | Type | Date | Decision | Worked/Failed | Why | Action | Priority | Metric To Watch.
+Decision colors: Scale=emerald, Fix=amber, Stop=red, Test=blue, Boost=purple, Do Not Boost=red.
+This table must make it obvious what to do with each important post format next.
+
+Stop / Start / Continue:
+If reportData.stopStartContinue exists, render three side-by-side columns:
+  STOP: item, why, replacement
+  START: item, why, first step
+  CONTINUE: item, why, scale plan
+
+Experiments To Run:
+If reportData.experimentsToRun exists, render experiment cards with Hypothesis, Execution, Success Metric, and Duration.
 
 ━━ SECTION 15: 30-DAY EXECUTION PLAN ━━
 Section header "📋 30-Day Execution Roadmap"

@@ -77,29 +77,69 @@ function igVal(data: any[], name: string): number {
   return 0;
 }
 
-function getBreakdownValue(results: any[], keys: string[]): number {
-  const normalizedKeys = keys.map((k) => k.toUpperCase());
+function insightNumber(value: any): number {
+  if (typeof value === "number") return value;
+  if (typeof value === "string") return Number(value) || 0;
+  if (typeof value?.value === "number") return value.value;
+  return 0;
+}
 
-  const match = results.find((item: any) => {
-    const raw = String(item?.dimension_values?.[0] || "").toUpperCase();
-    return normalizedKeys.includes(raw);
-  });
+function sumInsightMetric(metric: any): number {
+  if (!metric) return 0;
 
-  return match?.value || 0;
+  if (metric.total_value?.value != null) {
+    return insightNumber(metric.total_value.value);
+  }
+
+  if (Array.isArray(metric.values)) {
+    return metric.values.reduce(
+      (sum: number, item: any) => sum + insightNumber(item?.value),
+      0
+    );
+  }
+
+  return insightNumber(metric.value);
 }
 
 function parseInstagramFollowStats(payload: any) {
   const results = payload?.data?.[0]?.total_value?.breakdowns?.[0]?.results || [];
 
-  return {
-    follows: getBreakdownValue(results, ["FOLLOW", "FOLLOWS", "FOLLOWER"]),
-    unfollows: getBreakdownValue(results, [
-      "UNFOLLOW",
-      "UNFOLLOWS",
-      "UNFOLLOWER",
-      "NON_FOLLOWER",
-    ]),
-  };
+  return results.reduce(
+    (stats: { follows: number; unfollows: number }, item: any) => {
+      const raw = String(item?.dimension_values?.[0] || "")
+        .toUpperCase()
+        .replace(/[\s-]/g, "_");
+      const value = insightNumber(item?.value);
+
+      if (["FOLLOW", "FOLLOWS", "FOLLOWER", "FOLLOWERS"].includes(raw)) {
+        stats.follows += value;
+      }
+
+      if (
+        [
+          "UNFOLLOW",
+          "UNFOLLOWS",
+          "UNFOLLOWER",
+          "UNFOLLOWERS",
+          "NON_FOLLOWER",
+          "NONFOLLOWER",
+        ].includes(raw)
+      ) {
+        stats.unfollows += value;
+      }
+
+      return stats;
+    },
+    { follows: 0, unfollows: 0 }
+  );
+}
+
+function parseInstagramProfileViews(payload: any): number {
+  const metric =
+    payload?.data?.find((m: any) => m.name === "profile_views") ||
+    payload?.data?.[0];
+
+  return sumInsightMetric(metric);
 }
 
 // ─── OLD BEHAVIOR: text-only caption matching ────────────────────────────────
@@ -2145,7 +2185,7 @@ export default function SocialMediaReport({
             (s: number, v: any) => s + (v.value || 0),
             0
           ) || 0,
-        igProfileViews: igProfileViewsJson?.data?.[0]?.total_value?.value || 0,
+        igProfileViews: parseInstagramProfileViews(igProfileViewsJson),
       });
 
       if (platform === "FB" || platform === "BOTH") {
@@ -2399,7 +2439,7 @@ export default function SocialMediaReport({
       )
         .then((r) => r.json())
         .then((d) => {
-          setIgProfileViews(d?.data?.[0]?.total_value?.value || 0);
+          setIgProfileViews(parseInstagramProfileViews(d));
         })
         .catch(() => { });
     } catch {

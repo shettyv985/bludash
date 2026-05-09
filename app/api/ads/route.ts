@@ -8,6 +8,18 @@ type ClientConfig = {
 };
 
 const CLIENT_CONFIG: Record<string, ClientConfig> = {
+  ABADBuilders: {
+    token: process.env.ABADBuilders_TOKEN || "",
+    adAccountId: process.env.ABADBuilders_AD_ACCOUNT_ID || "",
+    fbPageId: process.env.ABADBuilders_FB_PAGE_ID || "",
+    igUserId: process.env.ABADBuilders_IG_USER_ID || "",
+  },
+  AngelLungies: {
+    token: process.env.AngelLungies_TOKEN || "",
+    adAccountId: process.env.AngelLungies_AD_ACCOUNT_ID || "",
+    fbPageId: process.env.AngelLungies_FB_PAGE_ID || "",
+    igUserId: process.env.AngelLungies_IG_USER_ID || "",
+  },
   GEOJIT: {
     token: process.env.GEOJIT_TOKEN || "",
     adAccountId: process.env.GEOJIT_AD_ACCOUNT_ID || "",
@@ -25,12 +37,6 @@ const CLIENT_CONFIG: Record<string, ClientConfig> = {
     adAccountId: process.env.HALWAHAWELI_AD_ACCOUNT_ID || "",
     fbPageId: process.env.HALWAHAWELI_FB_PAGE_ID || "",
     igUserId: process.env.HALWAHAWELI_IG_USER_ID || "",
-  },
-  ABADBuilders: {
-    token: process.env.ABADBuilders_TOKEN || "",
-    adAccountId: process.env.ABADBuilders_AD_ACCOUNT_ID || "",
-    fbPageId: process.env.ABADBuilders_FB_PAGE_ID || "",
-    igUserId: process.env.ABADBuilders_IG_USER_ID || "",
   },
   Zeiq: {
     token: process.env.Zeiq_TOKEN || "",

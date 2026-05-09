@@ -30,6 +30,11 @@ export const CLIENTS = {
     name: "BLUSTEAK",
     clientKey: "ALL",
   },
+  angelLungies123: {
+    password: "angelLungies@123",
+    name: "Angel Lungies",
+    clientKey: "AngelLungies",
+  },
 };
 
 export type ClientKey = keyof typeof CLIENTS;
@@ -40,4 +45,5 @@ export const ALL_CLIENTS = [
   { label: "Halwa Haweli", value: "HALWAHAWELI" },
   { label: "ABAD Builders", value: "ABADBuilders" },
   { label: "Zeiq", value: "Zeiq" },
+  { label: "Angel Lungies", value: "AngelLungies" },
 ];

@@ -2,6 +2,18 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const CLIENT_CONFIG: Record<string, { token: string; fbPageId: string; igUserId: string; adAccountId: string }> = {
+  ABADBuilders: {
+    token: process.env.ABADBuilders_TOKEN!,
+    fbPageId: process.env.ABADBuilders_FB_PAGE_ID!,
+    igUserId: process.env.ABADBuilders_IG_USER_ID!,
+    adAccountId: process.env.ABADBuilders_AD_ACCOUNT_ID!,
+  },
+  AngelLungies: {
+    token: process.env.AngelLungies_TOKEN!,
+    fbPageId: process.env.AngelLungies_FB_PAGE_ID!,
+    igUserId: process.env.AngelLungies_IG_USER_ID!,
+    adAccountId: process.env.AngelLungies_AD_ACCOUNT_ID!,
+  },
   GEOJIT: {
     token: process.env.GEOJIT_TOKEN!,
     fbPageId: process.env.GEOJIT_FB_PAGE_ID!,
@@ -20,12 +32,7 @@ const CLIENT_CONFIG: Record<string, { token: string; fbPageId: string; igUserId:
     igUserId: process.env.HALWAHAWELI_IG_USER_ID!,
     adAccountId: process.env.HALWAHAWELI_AD_ACCOUNT_ID!,
   },
-  ABADBuilders: {
-    token: process.env.ABADBuilders_TOKEN!,
-    fbPageId: process.env.ABADBuilders_FB_PAGE_ID!,
-    igUserId: process.env.ABADBuilders_IG_USER_ID!,
-    adAccountId: process.env.ABADBuilders_AD_ACCOUNT_ID!,
-  },
+  
   Zeiq: {
     token: process.env.Zeiq_TOKEN!,
     fbPageId: process.env.Zeiq_FB_PAGE_ID!,
