@@ -1,6 +1,7 @@
 // lib/buildSocialReportPayload.ts
 // Crunches raw social media post data into a deeply pre-analyzed payload.
 // Manus receives this — it never needs to fetch, calculate, or format.
+import { findBoostedMatch } from "@/lib/boostedPostMatch";
 
 export interface SocialPost {
   id: string;
@@ -23,6 +24,8 @@ export interface SocialPost {
 export interface BoostedPostData {
   adName: string;
   amountSpent: string;
+  postId?: string;
+  platform?: "FB" | "IG" | "UNKNOWN";
   reach: number;
   impressions: number;
   clicks: number;
@@ -106,6 +109,9 @@ export interface PeriodComparison {
 export interface SocialReportPayload {
   meta: {
     client: string;
+    clientName?: string;
+    adAccountId?: string;
+    adAccountName?: string;
     from: string;
     to: string;
     platform: string;
@@ -360,17 +366,7 @@ export function buildSocialReportPayload(
 ): SocialReportPayload {
 
   function matchBoosted(post: SocialPost): BoostedPostData | null {
-    const key = post.message.trim().substring(0, 100).toLowerCase();
-    return (
-      boostedMap[key] ||
-      Object.values(boostedMap).find(
-        (b) =>
-          b.body.trim().substring(0, 100).toLowerCase() === key ||
-          post.message.trim().startsWith(b.body.trim().substring(0, 80)) ||
-          b.body.trim().startsWith(post.message.trim().substring(0, 80))
-      ) ||
-      null
-    );
+    return findBoostedMatch(post, boostedMap);
   }
 
   function analyzePost(post: SocialPost, platForm: "FB" | "IG"): AnalyzedPost {

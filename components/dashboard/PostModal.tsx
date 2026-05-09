@@ -391,9 +391,9 @@ export default function PostModal({
               </p>
               <div className="grid grid-cols-3 gap-2">
                 <StatBox label="Total Reach"    value={(post.reach    + boosted!.reach).toLocaleString()}        dark={dark} accent={dark ? "text-blue-400" : "text-blue-600"} />
-                <StatBox label="Total Likes"    value={(post.likes    + boosted!.paidLikes).toLocaleString()}    dark={dark} accent={dark ? "text-blue-400" : "text-blue-600"} />
-                <StatBox label="Total Comments" value={(post.comments + boosted!.paidComments).toLocaleString()} dark={dark} accent={dark ? "text-blue-400" : "text-blue-600"} />
-                <StatBox label="Total Shares"   value={(post.shares   + boosted!.paidShares).toLocaleString()}   dark={dark} accent={dark ? "text-blue-400" : "text-blue-600"} />
+                <StatBox label="Total Likes"    value={post.likes.toLocaleString()}                              dark={dark} accent={dark ? "text-blue-400" : "text-blue-600"} />
+                <StatBox label="Total Comments" value={post.comments.toLocaleString()}                           dark={dark} accent={dark ? "text-blue-400" : "text-blue-600"} />
+                <StatBox label="Total Shares"   value={post.shares.toLocaleString()}                             dark={dark} accent={dark ? "text-blue-400" : "text-blue-600"} />
               </div>
             </div>
           )}

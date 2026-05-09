@@ -8,6 +8,7 @@ import PostModal from "./PostModal";
 import ManusReportToast from "./ManusReportToast";
 import { buildSocialReportPayload } from "@/lib/buildSocialReportPayload";
 import { generateSocialReportPDF } from "@/lib/generateSocialReportPDF";
+import { findBoostedMatch } from "@/lib/boostedPostMatch";
 
 interface Post {
   id: string;
@@ -142,22 +143,11 @@ function parseInstagramProfileViews(payload: any): number {
   return sumInsightMetric(metric);
 }
 
-// ─── OLD BEHAVIOR: text-only caption matching ────────────────────────────────
 function matchBoosted(
   post: Post,
   boostedMap: Record<string, BoostedPost>
 ): BoostedPost | null {
-  const key = post.message.trim().substring(0, 100).toLowerCase();
-  return (
-    boostedMap[key] ||
-    Object.values(boostedMap).find(
-      (b) =>
-        b.body.trim().substring(0, 100).toLowerCase() === key ||
-        post.message.trim().startsWith(b.body.trim().substring(0, 80)) ||
-        b.body.trim().startsWith(post.message.trim().substring(0, 80))
-    ) ||
-    null
-  );
+  return findBoostedMatch(post, boostedMap);
 }
 
 function exportCSV(params: {

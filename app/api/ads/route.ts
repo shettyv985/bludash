@@ -1,51 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-
-type ClientConfig = {
-  token: string;
-  adAccountId: string;
-  fbPageId?: string;
-  igUserId?: string;
-};
-
-const CLIENT_CONFIG: Record<string, ClientConfig> = {
-  ABADBuilders: {
-    token: process.env.ABADBuilders_TOKEN || "",
-    adAccountId: process.env.ABADBuilders_AD_ACCOUNT_ID || "",
-    fbPageId: process.env.ABADBuilders_FB_PAGE_ID || "",
-    igUserId: process.env.ABADBuilders_IG_USER_ID || "",
-  },
-  AngelLungies: {
-    token: process.env.AngelLungies_TOKEN || "",
-    adAccountId: process.env.AngelLungies_AD_ACCOUNT_ID || "",
-    fbPageId: process.env.AngelLungies_FB_PAGE_ID || "",
-    igUserId: process.env.AngelLungies_IG_USER_ID || "",
-  },
-  GEOJIT: {
-    token: process.env.GEOJIT_TOKEN || "",
-    adAccountId: process.env.GEOJIT_AD_ACCOUNT_ID || "",
-    fbPageId: process.env.GEOJIT_FB_PAGE_ID || "",
-    igUserId: process.env.GEOJIT_IG_USER_ID || "",
-  },
-  CHAKOLAS: {
-    token: process.env.CHAKOLAS_TOKEN || "",
-    adAccountId: process.env.CHAKOLAS_AD_ACCOUNT_ID || "",
-    fbPageId: process.env.CHAKOLAS_FB_PAGE_ID || "",
-    igUserId: process.env.CHAKOLAS_IG_USER_ID || "",
-  },
-  HALWAHAWELI: {
-    token: process.env.HALWAHAWELI_TOKEN || "",
-    adAccountId: process.env.HALWAHAWELI_AD_ACCOUNT_ID || "",
-    fbPageId: process.env.HALWAHAWELI_FB_PAGE_ID || "",
-    igUserId: process.env.HALWAHAWELI_IG_USER_ID || "",
-  },
-  Zeiq: {
-    token: process.env.Zeiq_TOKEN || "",
-    adAccountId: process.env.Zeiq_AD_ACCOUNT_ID || "",
-    fbPageId: process.env.Zeiq_FB_PAGE_ID || "",
-    igUserId: process.env.Zeiq_IG_USER_ID || "",
-  },
-
-};
+import { getMetaClientConfig } from "@/lib/metaClientConfig";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -55,7 +9,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Missing client" }, { status: 400 });
   }
 
-  const config = CLIENT_CONFIG[client];
+  const config = getMetaClientConfig(client);
 
   if (!config) {
     return NextResponse.json({ error: "Invalid client" }, { status: 400 });
@@ -71,6 +25,8 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     token: config.token,
     adAccountId: config.adAccountId,
+    adAccountName: config.adAccountName,
+    clientName: config.clientName,
     fbPageId: config.fbPageId || null,
     igUserId: config.igUserId || null,
   });

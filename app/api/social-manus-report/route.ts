@@ -1,6 +1,7 @@
 // app/api/social-manus-report/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import type { SocialReportPayload } from "@/lib/buildSocialReportPayload";
+import { getMetaClientConfig } from "@/lib/metaClientConfig";
 
 const MANUS_BASE = "https://api.manus.ai/v2";
 
@@ -43,6 +44,15 @@ const attentionRequiredPosts = [...payload.posts]
   return `You are a world-class Social Media strategist specialising in Facebook and Instagram organic + paid content for Indian brands. You are known for brutally honest, data-driven analysis that identifies the EXACT reasons why content succeeds or fails.
 
 CRITICAL INSTRUCTION: Your ENTIRE response must be a single valid JSON object. No markdown, no prose, no code fences, no explanation outside the JSON. Start with { and end with }.
+
+AUTHORITATIVE META ACCOUNT CONTEXT:
+- Client key: ${payload.meta.client}
+- Client/account name: ${payload.meta.clientName ?? payload.meta.client}
+- Meta ad account ID: ${payload.meta.adAccountId ?? "NOT PROVIDED"}
+- Meta ad account name: ${payload.meta.adAccountName ?? payload.meta.clientName ?? payload.meta.client}
+- Report date range: ${payload.meta.from} to ${payload.meta.to}
+- Platform filter: ${payload.meta.platform}
+Use ONLY this pre-calculated payload. Do NOT infer, browse, switch, or select any other ad account. If any ad/account identity appears elsewhere, ignore it unless it matches the Meta ad account ID above.
 
 Every insight must:
 - Reference the EXACT post caption (first 80 chars), platform, date, and metric
@@ -370,6 +380,28 @@ export async function POST(req: NextRequest) {
   } catch (err: any) {
     return NextResponse.json({ error: `Invalid request body: ${err.message}` }, { status: 400 });
   }
+
+  const config = getMetaClientConfig(payload.meta?.client ?? null);
+  if (!config) {
+    return NextResponse.json({ error: "Invalid or missing client in report payload" }, { status: 400 });
+  }
+  if (!config.adAccountId) {
+    return NextResponse.json(
+      { error: `Missing Meta ad account ID for client ${config.clientKey}` },
+      { status: 500 }
+    );
+  }
+
+  payload = {
+    ...payload,
+    meta: {
+      ...payload.meta,
+      client: config.clientKey,
+      clientName: config.clientName,
+      adAccountId: config.adAccountId,
+      adAccountName: config.adAccountName,
+    },
+  };
 
   try {
     const res = await fetch(`${MANUS_BASE}/task.create`, {

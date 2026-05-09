@@ -3,6 +3,12 @@
 // C:\Users\Varun Shetty\Desktop\New folder\bludash\components\dashboard\AIChatBot.tsx
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import {
+  captionLookupKeys,
+  findBoostedMatch,
+  normalizedIdKeys,
+  type BoostPlatform,
+} from "@/lib/boostedPostMatch";
 
 const BASE = "https://graph.facebook.com/v25.0";
 
@@ -319,13 +325,28 @@ export default function AIChatBot({ client, from, to, dark, isAdmin }: Props) {
 
       let boostedMap: Record<string, any> = {};
       try {
-        const adsData = await (await fetch(`${BASE}/${adsCfg.adAccountId}/ads?fields=id,name,status,creative{body,object_story_spec}&limit=200&access_token=${cfg.token}`)).json();
+        const adsData = await (await fetch(`${BASE}/${adsCfg.adAccountId}/ads?fields=id,name,status,creative{body,object_story_id,effective_object_story_id,effective_instagram_story_id,instagram_permalink_url,object_story_spec{page_id,instagram_actor_id,link_data{message},photo_data{caption},video_data{message}}}&limit=200&access_token=${cfg.token}`)).json();
         await Promise.all((adsData.data || []).map(async (ad: any) => {
           try {
             const body = ad.creative?.body || ad.creative?.object_story_spec?.link_data?.message || ad.creative?.object_story_spec?.photo_data?.caption || ad.creative?.object_story_spec?.video_data?.message || "";
-            if (!body) return;
             let ins = (await (await fetch(`${BASE}/${ad.id}/insights?fields=spend,reach,impressions,clicks,cpm,ctr,actions,account_currency&time_range={"since":"${from}","until":"${to}"}&access_token=${cfg.token}`)).json()).data?.[0] || {};
-            if (!ins.spend || parseFloat(ins.spend) === 0) ins = (await (await fetch(`${BASE}/${ad.id}/insights?fields=spend,reach,impressions,clicks,cpm,ctr,actions,account_currency&date_preset=maximum&access_token=${cfg.token}`)).json()).data?.[0] || ins;
+            const objectStoryId = ad.creative?.object_story_id || ad.creative?.effective_object_story_id || "";
+            const instagramStoryId = ad.creative?.effective_instagram_story_id || "";
+            const paidReach = parseInt(ins.reach || "0", 10);
+            const impressions = parseInt(ins.impressions || "0", 10);
+            const clicks = parseInt(ins.clicks || "0", 10);
+            if (parseFloat(ins.spend || "0") === 0 && paidReach === 0 && impressions === 0 && clicks === 0) return;
+            const spec = ad.creative?.object_story_spec || {};
+            const adName = String(ad.name || "").toLowerCase();
+            const inferredPlatform: BoostPlatform = instagramStoryId
+              ? "IG"
+              : objectStoryId
+                ? "FB"
+                : spec.instagram_actor_id || ad.creative?.instagram_permalink_url || adName.includes("instagram") || adName.includes("insta") || adName.includes("ig")
+                  ? "IG"
+                  : spec.page_id || adName.includes("facebook") || adName.includes("fb")
+                    ? "FB"
+                    : "UNKNOWN";
   const getAction = (types: string[]) => {
   for (const t of types) {
     const found = ins.actions?.find((a: any) => a.action_type === t);
@@ -333,35 +354,44 @@ export default function AIChatBot({ client, from, to, dark, isAdmin }: Props) {
   }
   return 0;
 };
+const getSaneAction = (types: string[]) => {
+  const value = getAction(types);
+  const maxActionCount = Math.max(
+    parseInt(ins.impressions || "0", 10),
+    parseInt(ins.reach || "0", 10)
+  );
+  return maxActionCount > 0 && value > maxActionCount ? 0 : value;
+};
 
 const entry = {
   adName: ad.name,
   status: ad.status,
   amountSpent: ins.spend || "0",
-  paidReach: parseInt(ins.reach || "0", 10),
-  paidLikes: getAction(["onsite_conversion.post_net_like", "like", "post_reaction"]),
-  paidComments: getAction(["onsite_conversion.post_net_comment", "comment", "post_comment"]),
-  paidShares: getAction(["post", "share", "post_share"]),
-  impressions: parseInt(ins.impressions || "0", 10),
-  clicks: parseInt(ins.clicks || "0", 10),
+  postId: objectStoryId || instagramStoryId || ad.id,
+  platform: inferredPlatform,
+  paidReach,
+  paidLikes: getSaneAction(["post_reaction"]),
+  paidComments: getSaneAction(["onsite_conversion.post_net_comment", "comment", "post_comment"]),
+  paidShares: getSaneAction(["post", "share", "post_share"]),
+  impressions,
+  clicks,
   cpm: parseFloat(ins.cpm || "0").toFixed(2),
   ctr: parseFloat(ins.ctr || "0").toFixed(2),
   body: body.trim(),
 };
 
 // Usage:
-// likes: getAction(["onsite_conversion.post_net_like", "like", "post_reaction"])
-            const key = body.trim().substring(0, 100).toLowerCase();
-
-            if (!boostedMap[key] || parseFloat(entry.amountSpent) > parseFloat(boostedMap[key].amountSpent)) boostedMap[key] = entry;
+// likes: getSaneAction(["post_reaction"])
+            const setEntry = (key: string) => {
+              if (!boostedMap[key] || parseFloat(entry.amountSpent) > parseFloat(boostedMap[key].amountSpent)) boostedMap[key] = entry;
+            };
+            for (const id of [...normalizedIdKeys(objectStoryId), ...normalizedIdKeys(instagramStoryId)]) setEntry(`post:${id}`);
+            for (const key of captionLookupKeys(entry.platform, body)) setEntry(key);
           } catch {}
         }));
       } catch {}
 
-      const mb = (msg: string) => {
-        const k = msg.trim().substring(0, 100).toLowerCase();
-        return boostedMap[k] || Object.values(boostedMap).find((b: any) => b.body.trim().substring(0, 100).toLowerCase() === k || msg.trim().startsWith(b.body.trim().substring(0, 80)) || b.body.trim().startsWith(msg.trim().substring(0, 80))) || null;
-      };
+      const mb = (postId: string, msg: string) => findBoostedMatch({ id: postId, message: msg }, boostedMap);
 
       const fbRaw = (await (await fetch(`${BASE}/${cfg.fbPageId}/posts?fields=id,message,created_time,permalink_url,reactions.summary(total_count),comments.summary(total_count),shares&since=${from}&until=${to}&limit=100&access_token=${cfg.token}`)).json()).data || [];
       const fbPosts: Post[] = await Promise.all(fbRaw.map(async (p: any) => {
@@ -369,7 +399,7 @@ const entry = {
         const likes = p.reactions?.summary?.total_count ?? 0, comments = p.comments?.summary?.total_count ?? 0, shares = p.shares?.count ?? 0;
         let reach = 0;
         try { reach = (await (await fetch(`${BASE}/${p.id}/insights?metric=post_impressions_unique&access_token=${cfg.token}`)).json())?.data?.find((m: any) => m.name === "post_impressions_unique")?.values?.[0]?.value ?? 0; } catch {}
-        const b = mb(p.message || "");
+        const b = mb(p.id, p.message || "");
         return { id: p.id, message: p.message || "", createdTime: p.created_time, type: isReel ? "REEL" : "IMAGE", reach, likes, comments, shares, saves: 0, engagementRate: reach > 0 ? (((likes + comments + shares) / reach) * 100).toFixed(2) : "0.00", boosted: b ? { adName: b.adName, amountSpent: b.amountSpent, paidReach: b.paidReach, paidLikes: b.paidLikes, paidComments: b.paidComments, paidShares: b.paidShares, impressions: b.impressions, clicks: b.clicks, cpm: b.cpm, ctr: b.ctr, status: b.status } : null };
       }));
 
@@ -379,7 +409,7 @@ const entry = {
         try { const ins = (await (await fetch(`${BASE}/${p.id}/insights?metric=reach,likes,comments,shares,saved&period=lifetime&access_token=${cfg.token}`)).json())?.data; reach = igVal(ins, "reach"); likes = igVal(ins, "likes"); comments = igVal(ins, "comments"); shares = igVal(ins, "shares"); saves = igVal(ins, "saved"); } catch {}
         const mt = p.media_type === "VIDEO" ? "REEL" : p.media_type === "CAROUSEL_ALBUM" ? "CAROUSEL" : "IMAGE";
         if (mt === "REEL") { try { const v = igVal((await (await fetch(`${BASE}/${p.id}/insights?metric=ig_reels_avg_watch_time&period=lifetime&access_token=${cfg.token}`)).json())?.data, "ig_reels_avg_watch_time"); if (v) avgWatchTime = Math.round(v / 1000); } catch {} }
-        const b = mb(p.caption || "");
+        const b = mb(p.id, p.caption || "");
         return { id: p.id, message: p.caption || "", createdTime: p.timestamp, type: mt, reach, likes, comments, shares, saves, engagementRate: reach > 0 ? (((likes + comments + shares + saves) / reach) * 100).toFixed(2) : "0.00", avgWatchTime, boosted: b ? { adName: b.adName, amountSpent: b.amountSpent, paidReach: b.paidReach, paidLikes: b.paidLikes, paidComments: b.paidComments, paidShares: b.paidShares, impressions: b.impressions, clicks: b.clicks, cpm: b.cpm, ctr: b.ctr, status: b.status } : null };
       }));
 

@@ -3,6 +3,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import type { SocialReportPayload } from "@/lib/buildSocialReportPayload";
+import { getMetaClientConfig } from "@/lib/metaClientConfig";
 
 const MANUS_BASE = "https://api.manus.ai/v2";
 
@@ -52,6 +53,15 @@ function buildHTMLPrompt(payload: SocialReportPayload, reportData: any): string 
 3. Do NOT save to file. Do NOT upload. Do NOT describe what you made.
 4. Zero markdown. Zero code fences. Zero explanation. Zero preamble.
 5. Every section MUST be rendered — no skipping, no placeholders.
+
+AUTHORITATIVE META ACCOUNT CONTEXT:
+- Client key: ${payload.meta.client}
+- Client/account name: ${payload.meta.clientName ?? payload.meta.client}
+- Meta ad account ID: ${payload.meta.adAccountId ?? "NOT PROVIDED"}
+- Meta ad account name: ${payload.meta.adAccountName ?? payload.meta.clientName ?? payload.meta.client}
+- Report date range: ${payload.meta.from} to ${payload.meta.to}
+- Platform filter: ${payload.meta.platform}
+Use ONLY this pre-calculated payload. Do NOT infer, browse, switch, or select any other ad account. If any ad/account identity appears elsewhere, ignore it unless it matches the Meta ad account ID above.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⚠️ CONTENT QUALITY MANDATE — THIS IS THE MOST IMPORTANT RULE
@@ -405,6 +415,28 @@ export async function POST(req: NextRequest) {
   } catch (err: any) {
     return NextResponse.json({ error: `Invalid request body: ${err.message}` }, { status: 400 });
   }
+
+  const config = getMetaClientConfig(payload.meta?.client ?? null);
+  if (!config) {
+    return NextResponse.json({ error: "Invalid or missing client in report payload" }, { status: 400 });
+  }
+  if (!config.adAccountId) {
+    return NextResponse.json(
+      { error: `Missing Meta ad account ID for client ${config.clientKey}` },
+      { status: 500 }
+    );
+  }
+
+  payload = {
+    ...payload,
+    meta: {
+      ...payload.meta,
+      client: config.clientKey,
+      clientName: config.clientName,
+      adAccountId: config.adAccountId,
+      adAccountName: config.adAccountName,
+    },
+  };
 
   try {
     const createRes = await fetch(`${MANUS_BASE}/task.create`, {

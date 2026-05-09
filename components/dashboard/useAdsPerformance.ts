@@ -144,6 +144,15 @@ function getActionExact(actions: MetaAction[] | undefined, ...types: string[]): 
   return 0;
 }
 
+function getSaneActionExact(
+  actions: MetaAction[] | undefined,
+  maxReasonable: number,
+  ...types: string[]
+): number {
+  const value = getActionExact(actions, ...types);
+  return maxReasonable > 0 && value > maxReasonable ? 0 : value;
+}
+
 function getActionMax(actions: MetaAction[] | undefined, ...types: string[]): number {
   if (!actions) return 0;
   return Math.max(...types.map((type) => getActionExact(actions, type)), 0);
@@ -188,22 +197,29 @@ function buildInsight(ins: MetaInsight | undefined): AdInsight {
   const leads = getLeadCount(ins?.actions);
   const landingPageViews = getActionExact(ins?.actions, "landing_page_view");
   const postEngagements = getActionExact(ins?.actions, "post_engagement");
+  const maxActionCount = Math.max(impressions, reach);
 
-  const likes = getActionExact(
+  const likes = getSaneActionExact(
     ins?.actions,
-    "onsite_conversion.post_net_like",
-    "like",
+    maxActionCount,
     "post_reaction"
   );
 
-  const comments = getActionExact(
+  const comments = getSaneActionExact(
     ins?.actions,
+    maxActionCount,
     "onsite_conversion.post_net_comment",
     "comment",
     "post_comment"
   );
 
-  const shares = getActionExact(ins?.actions, "post", "share", "post_share");
+  const shares = getSaneActionExact(
+    ins?.actions,
+    maxActionCount,
+    "post",
+    "share",
+    "post_share"
+  );
 
   const videoViews = getActionExact(
     ins?.actions,
