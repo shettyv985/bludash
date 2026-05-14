@@ -53,6 +53,11 @@ export const CLIENTS = {
     name: "Halwa Haweli",
     clientKey: "HALWAHAWELI",
   },
+  IncheonKia123: {
+    password: "incheonKia@123",
+    name: "Incheon Kia",
+    clientKey: "IncheonKia",
+  },
   kendamil_qatar123: {
     password: "kendamil_qatar@123",
     name: "Kendamil Qatar",
@@ -90,6 +95,7 @@ export const ALL_CLIENTS = [
   { label: "CnC", value: "CnC" },
   { label: "Geojit", value: "GEOJIT" },
   { label: "Halwa Haweli", value: "HALWAHAWELI" },
+  { label: "Incheon Kia", value: "IncheonKia" },
   { label: "Kendamil Qatar", value: "Kendamil_Qatar" },
   { label: "Memory Train", value: "MemoryTrain" },
   { label: "Spaces ECO Clean", value: "SpacesECO_Clean" },

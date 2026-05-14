@@ -418,7 +418,7 @@ console.log("[bludash] account actions:", JSON.stringify(json.data?.[0]?.actions
         const adSet = adSetMap[adSetId] || {};
         const creative = ad.creative || {};
 
-        const thumbnail = creative.thumbnail_url || creative.image_url || null;
+        const thumbnail = creative.image_url || creative.thumbnail_url || null;
         const videoId = creative.video_id || null;
         const isVideo = !!videoId;
 

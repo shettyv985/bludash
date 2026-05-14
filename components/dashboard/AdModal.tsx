@@ -43,6 +43,37 @@ interface Props {
   token: string;
 }
 
+type VideoThumbnail = {
+  uri?: string;
+  width?: number;
+  height?: number;
+  is_preferred?: boolean;
+};
+
+type VideoDetails = {
+  source?: string;
+  picture?: string;
+  thumbnails?: {
+    data?: VideoThumbnail[];
+  };
+};
+
+type VideoMedia = {
+  adId: string;
+  videoSrc: string | null;
+  posterSrc: string | null;
+};
+
+function getBestVideoPoster(details: VideoDetails, fallback: string | null) {
+  const thumbnails = details.thumbnails?.data || [];
+  const preferred = thumbnails.find((thumb) => thumb.is_preferred && thumb.uri);
+  const largest = [...thumbnails]
+    .filter((thumb) => thumb.uri)
+    .sort((a, b) => (b.width || 0) * (b.height || 0) - (a.width || 0) * (a.height || 0))[0];
+
+  return preferred?.uri || largest?.uri || details.picture || fallback || null;
+}
+
 function StatBox({
   label,
   value,
@@ -122,9 +153,8 @@ function getCPCAccent(cpc: number, dark: boolean) {
 }
 
 export default function AdModal({ ad, onClose, dark, token }: Props) {
-  const [videoSrc, setVideoSrc] = useState<string | null>(null);
-  const [videoError, setVideoError] = useState(false);
-  const [mediaLoading, setMediaLoading] = useState(false);
+  const [videoMedia, setVideoMedia] = useState<VideoMedia | null>(null);
+  const [failedVideoAdId, setFailedVideoAdId] = useState<string | null>(null);
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -141,32 +171,38 @@ export default function AdModal({ ad, onClose, dark, token }: Props) {
   }, [onClose]);
 
   useEffect(() => {
-    setVideoSrc(null);
-    setVideoError(false);
-    setMediaLoading(false);
-  }, [ad?.id]);
-
-  useEffect(() => {
     if (!ad?.isVideo || !ad.videoId || !token) return;
+    const adId = ad.id;
+    const fallbackPoster = ad.thumbnail;
+    const controller = new AbortController();
 
-    setMediaLoading(true);
-
-    fetch(`${BASE}/${ad.videoId}?fields=source,picture&access_token=${token}`)
+    fetch(`${BASE}/${ad.videoId}?fields=source,picture,thumbnails&access_token=${token}`, {
+      signal: controller.signal,
+    })
       .then((r) => r.json())
-      .then((d) => {
-        if (d.source) {
-          setVideoSrc(`/api/proxy-video?url=${encodeURIComponent(d.source)}`);
-        } else {
-          setVideoSrc(null);
-        }
+      .then((d: VideoDetails) => {
+        setVideoMedia({
+          adId,
+          posterSrc: getBestVideoPoster(d, fallbackPoster),
+          videoSrc: d.source ? `/api/proxy-video?url=${encodeURIComponent(d.source)}` : null,
+        });
       })
-      .catch(() => setVideoSrc(null))
-      .finally(() => setMediaLoading(false));
-  }, [ad?.id, ad?.videoId, ad?.isVideo, token]);
+      .catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setVideoMedia({ adId, posterSrc: fallbackPoster, videoSrc: null });
+      });
+
+    return () => controller.abort();
+  }, [ad?.id, ad?.videoId, ad?.isVideo, ad?.thumbnail, token]);
 
   if (!ad) return null;
 
   const ins = ad.insights;
+  const posterSrc = videoMedia?.adId === ad.id ? videoMedia.posterSrc : ad.thumbnail;
+  const videoSrc = videoMedia?.adId === ad.id ? videoMedia.videoSrc : null;
+  const videoError = failedVideoAdId === ad.id;
+  const mediaLoading =
+    ad.isVideo && !!ad.videoId && videoMedia?.adId !== ad.id && !videoError;
   const hasEngagement =
     ins.likes > 0 || ins.comments > 0 || ins.shares > 0 || ins.videoViews > 0;
 
@@ -200,8 +236,8 @@ export default function AdModal({ ad, onClose, dark, token }: Props) {
             controls
             playsInline
             preload="metadata"
-            poster={ad.thumbnail ?? undefined}
-            onError={() => setVideoError(true)}
+            poster={posterSrc ?? undefined}
+            onError={() => setFailedVideoAdId(ad.id)}
             style={{
               width: "100%",
               maxHeight: 480,
@@ -220,9 +256,9 @@ export default function AdModal({ ad, onClose, dark, token }: Props) {
           className="w-full bg-black rounded-t-2xl overflow-hidden relative flex items-center justify-center"
           style={{ minHeight: 220 }}
         >
-          {ad.thumbnail && (
+          {posterSrc && (
             <img
-              src={ad.thumbnail}
+              src={posterSrc}
               alt=""
               className="absolute inset-0 w-full h-full object-cover opacity-25"
             />
@@ -249,9 +285,9 @@ export default function AdModal({ ad, onClose, dark, token }: Props) {
           className="w-full bg-black rounded-t-2xl overflow-hidden relative flex items-center justify-center"
           style={{ minHeight: 220 }}
         >
-          {ad.thumbnail && (
+          {posterSrc && (
             <img
-              src={ad.thumbnail}
+              src={posterSrc}
               alt=""
               className="w-full object-cover opacity-40"
               style={{ maxHeight: 320 }}
@@ -271,10 +307,10 @@ export default function AdModal({ ad, onClose, dark, token }: Props) {
       );
     }
 
-    if (ad.thumbnail) {
+    if (posterSrc) {
       return (
         <div className={`w-full rounded-t-2xl overflow-hidden flex items-center justify-center ${dark ? "bg-black/60" : "bg-black/10"}`}>
-          <img src={ad.thumbnail} alt="" className="w-full object-contain" style={{ maxHeight: 360 }} />
+          <img src={posterSrc} alt="" className="w-full object-contain" style={{ maxHeight: 420 }} />
         </div>
       );
     }
