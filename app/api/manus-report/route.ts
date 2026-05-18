@@ -4,6 +4,19 @@ import type { ReportPayload } from "@/lib/buildReportPayload";
 
 const MANUS_BASE = "https://api.manus.ai/v2";
 
+type ManusTaskResponse = {
+  task_id?: string;
+  id?: string;
+  error?: {
+    message?: string;
+  };
+  message?: string;
+};
+
+function getErrorMessage(err: unknown) {
+  return err instanceof Error ? err.message : "Unknown error";
+}
+
 function buildPrompt(payload: ReportPayload): string {
   return `You are a world-class Meta Ads strategist with 15+ years of experience managing high-budget campaigns for premium brands in India. You are known for your brutally honest, data-driven analysis that identifies the EXACT reasons why campaigns succeed or fail — not generic advice.
 
@@ -19,6 +32,7 @@ For creative analysis specifically:
 - Explain WHY a creative worked: Was it the hook? The emotion? The offer? The format? The CTA?
 - Explain WHY a creative failed: Weak hook? Wrong audience? Poor visual hierarchy? No urgency?
 - Reference the specific CTR, video view rate, engagement rate as evidence
+- For Reel/video creatives, reference hook rate, derived skip rate, average watch time, 50% hold rate, CTR, CPM, CPL, and leads wherever available
 - Suggest EXACTLY what to change (specific copy direction, visual style, CTA wording)
 
 Return this exact JSON schema (all fields required, no nulls):
@@ -207,11 +221,11 @@ export async function POST(req: NextRequest) {
 
   let payload: ReportPayload;
   try {
-    const body = await req.json();
+    const body = (await req.json()) as { payload?: ReportPayload };
+    if (!body.payload) throw new Error("Missing payload field");
     payload = body.payload;
-    if (!payload) throw new Error("Missing payload field");
-  } catch (err: any) {
-    return NextResponse.json({ error: `Invalid request body: ${err.message}` }, { status: 400 });
+  } catch (err: unknown) {
+    return NextResponse.json({ error: `Invalid request body: ${getErrorMessage(err)}` }, { status: 400 });
   }
 
   try {
@@ -229,9 +243,9 @@ export async function POST(req: NextRequest) {
     });
 
     const text = await res.text();
-    let data: any = {};
+    let data: ManusTaskResponse = {};
     try {
-      data = JSON.parse(text);
+      data = JSON.parse(text) as ManusTaskResponse;
     } catch {
       console.error("Non-JSON from Manus task.create:", text.slice(0, 500));
       return NextResponse.json({ error: "Manus returned a non-JSON response" }, { status: 500 });
@@ -252,8 +266,8 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ taskId });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("manus-report unhandled error:", err);
-    return NextResponse.json({ error: err?.message ?? "Internal server error" }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(err) }, { status: 500 });
   }
 }

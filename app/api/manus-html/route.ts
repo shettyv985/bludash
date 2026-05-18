@@ -4,7 +4,20 @@ import type { ReportPayload } from "@/lib/buildReportPayload";
 
 const MANUS_BASE = "https://api.manus.ai/v2";
 
-function buildHTMLPrompt(payload: ReportPayload, reportData: any): string {
+type ManusTaskResponse = {
+  task_id?: string;
+  id?: string;
+  error?: {
+    message?: string;
+  };
+  message?: string;
+};
+
+function getErrorMessage(err: unknown) {
+  return err instanceof Error ? err.message : "Unknown error";
+}
+
+function buildHTMLPrompt(payload: ReportPayload, reportData: unknown): string {
   return `You are an expert frontend developer and Meta Ads analyst. Your ONLY job is to write a single complete HTML file as your reply.
 
 ⚠️ CRITICAL OUTPUT RULES — READ THESE FIRST:
@@ -108,6 +121,11 @@ FORMAT ANALYSIS card (2-col):
 Left: Video performance summary | Right: Static performance summary
 From reportData.creativeDeepDive.formatAnalysis
 
+REEL / VIDEO PERFORMANCE TABLE:
+Render this inside Section 5 if payload.ads has any isVideo=true rows.
+Columns: Ad Name | Spend | CTR | CPM | Leads | CPL | Hook Rate | Skip Rate | Avg Watch | 50% Hold | Completion
+Use payload.ads values directly. Color Hook Rate: >=25 emerald, >=12 amber, <12 red. Color Skip Rate: <=75 emerald, <=88 amber, >88 red. This table must diagnose first-3-second Reel performance, not just delivery.
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 SECTION 6: WHAT'S WORKING (emerald theme)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -199,15 +217,18 @@ export async function POST(req: NextRequest) {
   }
 
   let payload: ReportPayload;
-  let reportData: any;
+  let reportData: unknown;
 
   try {
-    const body = await req.json();
+    const body = (await req.json()) as {
+      payload?: ReportPayload;
+      reportData?: unknown;
+    };
+    if (!body.payload || !body.reportData) throw new Error("Missing payload or reportData");
     payload = body.payload;
     reportData = body.reportData;
-    if (!payload || !reportData) throw new Error("Missing payload or reportData");
-  } catch (err: any) {
-    return NextResponse.json({ error: `Invalid request body: ${err.message}` }, { status: 400 });
+  } catch (err: unknown) {
+    return NextResponse.json({ error: `Invalid request body: ${getErrorMessage(err)}` }, { status: 400 });
   }
 
   try {
@@ -226,9 +247,9 @@ export async function POST(req: NextRequest) {
     });
 
     const createText = await createRes.text();
-    let createData: any = {};
+    let createData: ManusTaskResponse = {};
     try {
-      createData = JSON.parse(createText);
+      createData = JSON.parse(createText) as ManusTaskResponse;
     } catch {
       console.error("Non-JSON from Manus html task.create:", createText.slice(0, 500));
       return NextResponse.json({ error: "Manus returned non-JSON on task create" }, { status: 500 });
@@ -247,8 +268,8 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ taskId });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("manus-html unhandled error:", err);
-    return NextResponse.json({ error: err?.message ?? "Internal server error" }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(err) }, { status: 500 });
   }
 }

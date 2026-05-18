@@ -16,6 +16,11 @@ interface AdInsight {
   comments: number;
   shares: number;
   videoViews: number;
+  hookRate?: number;
+  skipRate?: number;
+  videoAvgWatchTime?: number | null;
+  holdRate50?: number;
+  completionRate?: number;
   currency: string;
 }
 
@@ -144,6 +149,34 @@ function getCPCAccent(cpc: number, dark: boolean) {
       ? "text-emerald-400"
       : "text-emerald-600"
     : cpc < 15
+      ? dark
+        ? "text-yellow-400"
+        : "text-yellow-600"
+      : dark
+        ? "text-red-400"
+        : "text-red-600";
+}
+
+function getHookAccent(hookRate: number, dark: boolean) {
+  return hookRate >= 25
+    ? dark
+      ? "text-emerald-400"
+      : "text-emerald-600"
+    : hookRate >= 12
+      ? dark
+        ? "text-yellow-400"
+        : "text-yellow-600"
+      : dark
+        ? "text-red-400"
+        : "text-red-600";
+}
+
+function getSkipAccent(skipRate: number, dark: boolean) {
+  return skipRate <= 75
+    ? dark
+      ? "text-emerald-400"
+      : "text-emerald-600"
+    : skipRate <= 88
       ? dark
         ? "text-yellow-400"
         : "text-yellow-600"
@@ -506,6 +539,40 @@ export default function AdModal({ ad, onClose, dark, token }: Props) {
                 accent={ins.cpc > 0 ? getCPCAccent(ins.cpc, dark) : undefined}
               />
               <StatBox label="CPM" value={fmtMoney(ins.cpm)} dark={dark} sub="Per 1,000 impressions" />
+              {ad.isVideo && (
+                <StatBox
+                  label="Hook Rate"
+                  value={fmtPct(ins.hookRate || 0)}
+                  dark={dark}
+                  accent={getHookAccent(ins.hookRate || 0, dark)}
+                  sub="3s views / impressions"
+                />
+              )}
+              {ad.isVideo && (
+                <StatBox
+                  label="Skip Rate"
+                  value={fmtPct(ins.skipRate || 0)}
+                  dark={dark}
+                  accent={getSkipAccent(ins.skipRate || 0, dark)}
+                  sub="Derived"
+                />
+              )}
+              {ad.isVideo && ins.videoAvgWatchTime != null && (
+                <StatBox
+                  label="Avg Watch"
+                  value={`${ins.videoAvgWatchTime}s`}
+                  dark={dark}
+                  accent={dark ? "text-purple-400" : "text-purple-600"}
+                />
+              )}
+              {ad.isVideo && (ins.holdRate50 || 0) > 0 && (
+                <StatBox
+                  label="50% Hold"
+                  value={fmtPct(ins.holdRate50 || 0)}
+                  dark={dark}
+                  accent={getHookAccent(ins.holdRate50 || 0, dark)}
+                />
+              )}
             </div>
           </div>
 

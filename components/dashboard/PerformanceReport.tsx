@@ -70,6 +70,35 @@ function getCPLHighlight(cpl: number): "good" | "warn" | "bad" {
   return cpl < 100 ? "good" : cpl < 300 ? "warn" : "bad";
 }
 
+function getHookHighlight(hookRate: number): "good" | "warn" | "bad" {
+  return hookRate >= 25 ? "good" : hookRate >= 12 ? "warn" : "bad";
+}
+
+function getSkipHighlight(skipRate: number): "good" | "warn" | "bad" {
+  return skipRate <= 75 ? "good" : skipRate <= 88 ? "warn" : "bad";
+}
+
+function getHoldHighlight(rate: number): "good" | "warn" | "bad" {
+  return rate >= 45 ? "good" : rate >= 25 ? "warn" : "bad";
+}
+
+function fmtSeconds(n: number | null) {
+  return n != null ? `${n.toFixed(n % 1 === 0 ? 0 : 1)}s` : "-";
+}
+
+function getReelVerdict(ad: Ad) {
+  const ins = ad.insights;
+  if (ins.impressions === 0) return "No delivery";
+  if (ins.hookRate >= 25 && ins.ctr >= 1.5 && (ins.leads === 0 || ins.cpl < 300)) {
+    return "Scale";
+  }
+  if (ins.hookRate < 12 && ins.skipRate > 88) return "Fix hook";
+  if (ins.ctr < 0.8 && ins.spend > 100) return "Weak click";
+  if (ins.cpl > 300 && ins.leads > 0) return "CPL heavy";
+  if (ins.hookRate >= 12 || ins.ctr >= 0.8) return "Test";
+  return "Review";
+}
+
 function SummaryCard({
   label,
   value,
@@ -603,12 +632,276 @@ function FlatTable({
   );
 }
 
+function ReelMetricCard({
+  label,
+  value,
+  sub,
+  tone,
+  dark,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  tone?: "good" | "warn" | "bad";
+  dark: boolean;
+}) {
+  const valueColor =
+    tone === "good"
+      ? dark
+        ? "text-emerald-300"
+        : "text-emerald-700"
+      : tone === "warn"
+        ? "text-amber-500"
+        : tone === "bad"
+          ? "text-rose-500"
+          : dark
+            ? "text-white"
+            : "text-slate-950";
+
+  return (
+    <div className={`rounded-[18px] border px-4 py-4 ${dark ? "border-white/[0.08] bg-white/[0.03]" : "border-violet-100 bg-white/90"}`}>
+      <p className={`text-[10px] font-bold tracking-[0.14em] uppercase ${dark ? "text-white/40" : "text-slate-500"}`}>
+        {label}
+      </p>
+      <p className={`mt-2 text-[24px] font-bold tabular-nums ${valueColor}`}>{value}</p>
+      <p className={`mt-1 text-[10px] leading-relaxed ${dark ? "text-white/30" : "text-slate-400"}`}>{sub}</p>
+    </div>
+  );
+}
+
+function PerformanceReelsPanel({
+  reels,
+  dark,
+  onRowClick,
+}: {
+  reels: Ad[];
+  dark: boolean;
+  onRowClick: (ad: Ad) => void;
+}) {
+  if (reels.length === 0) return null;
+
+  const sortedReels = [...reels].sort((a, b) => b.insights.spend - a.insights.spend);
+  const totalSpend = reels.reduce((s, ad) => s + ad.insights.spend, 0);
+  const totalImpressions = reels.reduce((s, ad) => s + ad.insights.impressions, 0);
+  const totalVideoViews = reels.reduce((s, ad) => s + ad.insights.videoViews, 0);
+  const totalClicks = reels.reduce((s, ad) => s + ad.insights.clicks, 0);
+  const totalLeads = reels.reduce((s, ad) => s + ad.insights.leads, 0);
+  const watchRows = reels.filter((ad) => ad.insights.videoAvgWatchTime != null);
+  const avgWatch =
+    watchRows.length > 0
+      ? watchRows.reduce((s, ad) => s + (ad.insights.videoAvgWatchTime || 0), 0) / watchRows.length
+      : null;
+  const avgHookRate = totalImpressions > 0 ? (totalVideoViews / totalImpressions) * 100 : 0;
+  const avgSkipRate = totalImpressions > 0 ? Math.max(0, 100 - avgHookRate) : 0;
+  const reelCTR = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
+  const reelCPM = totalImpressions > 0 ? (totalSpend / totalImpressions) * 1000 : 0;
+  const reelCPL = totalLeads > 0 ? totalSpend / totalLeads : 0;
+
+  const headers = [
+    "Creative",
+    "Spend",
+    "Impr.",
+    "3s Views",
+    "Hook",
+    "Skip",
+    "Avg Watch",
+    "50% Hold",
+    "CTR",
+    "CPM",
+    "Leads",
+    "CPL",
+    "Verdict",
+  ];
+  const rightHeaders = new Set(headers.filter((h) => h !== "Creative" && h !== "Verdict"));
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-3 px-1">
+        <div className={`w-1.5 h-1.5 rounded-full ${dark ? "bg-violet-300" : "bg-violet-500"}`} />
+        <p className={`text-[11px] font-bold tracking-[0.16em] uppercase ${dark ? "text-white/45" : "text-slate-500"}`}>
+          Performance Reels
+        </p>
+        <div className={`flex-1 h-px ${dark ? "bg-white/[0.04]" : "bg-black/[0.04]"}`} />
+        <span className={`text-[11px] font-semibold rounded-full px-3 py-1 border ${dark
+          ? "text-violet-200/80 border-violet-300/20 bg-violet-500/[0.07]"
+          : "text-violet-700 border-violet-200 bg-violet-50"
+        }`}>
+          {reels.length} video creative{reels.length !== 1 ? "s" : ""}
+        </span>
+      </div>
+
+      <div className={`rounded-[28px] border p-5 ${dark
+        ? "border-violet-300/10 bg-[linear-gradient(145deg,rgba(36,24,62,0.74),rgba(11,14,28,0.94))]"
+        : "border-violet-100 bg-[linear-gradient(145deg,#f5f3ff,#ffffff)]"
+      }`}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-3">
+          <ReelMetricCard
+            label="Video Spend"
+            value={fmtMoney(totalSpend)}
+            sub={`Across ${reels.length} creatives`}
+            dark={dark}
+          />
+          <ReelMetricCard
+            label="Hook Rate"
+            value={fmtPct(avgHookRate)}
+            sub="3s views / impressions"
+            tone={getHookHighlight(avgHookRate)}
+            dark={dark}
+          />
+          <ReelMetricCard
+            label="Skip Rate"
+            value={fmtPct(avgSkipRate)}
+            sub="Derived from non-hooked impressions"
+            tone={getSkipHighlight(avgSkipRate)}
+            dark={dark}
+          />
+          <ReelMetricCard
+            label="Avg Watch"
+            value={fmtSeconds(avgWatch)}
+            sub={watchRows.length > 0 ? `Data from ${watchRows.length} creatives` : "No watch-time field returned"}
+            dark={dark}
+          />
+          <ReelMetricCard
+            label="CTR / CPM"
+            value={`${fmtPct(reelCTR)} / ${fmtMoney(reelCPM)}`}
+            sub="Click and auction efficiency"
+            tone={getCTRHighlight(reelCTR)}
+            dark={dark}
+          />
+          <ReelMetricCard
+            label="CPL"
+            value={reelCPL > 0 ? fmtMoney(reelCPL) : "-"}
+            sub={totalLeads > 0 ? `${fmt(totalLeads)} leads from reels` : "No reel leads yet"}
+            tone={reelCPL > 0 ? getCPLHighlight(reelCPL) : undefined}
+            dark={dark}
+          />
+        </div>
+
+        <div className={`mt-4 rounded-xl border overflow-hidden ${dark ? "border-white/[0.06]" : "border-violet-100"}`}>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className={dark ? "bg-violet-950/30 border-b border-white/[0.06]" : "bg-violet-50 border-b border-violet-100"}>
+                  {headers.map((h) => (
+                    <th
+                      key={h}
+                      className={`px-3 py-2.5 text-[9px] font-bold tracking-widest uppercase ${rightHeaders.has(h) ? "text-right" : "text-left"} ${dark ? "text-violet-200/60" : "text-violet-700/70"}`}
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {sortedReels.map((ad, idx) => {
+                  const ins = ad.insights;
+                  const verdict = getReelVerdict(ad);
+                  const verdictColor =
+                    verdict === "Scale"
+                      ? dark
+                        ? "bg-emerald-500/15 text-emerald-300"
+                        : "bg-emerald-100 text-emerald-700"
+                      : verdict === "Fix hook" || verdict === "Weak click"
+                        ? dark
+                          ? "bg-rose-500/15 text-rose-300"
+                          : "bg-rose-100 text-rose-700"
+                        : verdict === "CPL heavy"
+                          ? dark
+                            ? "bg-amber-500/15 text-amber-300"
+                            : "bg-amber-100 text-amber-700"
+                          : dark
+                            ? "bg-white/[0.06] text-white/50"
+                            : "bg-slate-100 text-slate-600";
+
+                  return (
+                    <tr
+                      key={ad.id}
+                      onClick={() => onRowClick(ad)}
+                      className={`border-t cursor-pointer transition-colors ${dark
+                        ? `border-white/[0.04] ${idx % 2 === 0 ? "bg-white/[0.01]" : "bg-transparent"} hover:bg-white/[0.04]`
+                        : `border-violet-50 ${idx % 2 === 0 ? "bg-white" : "bg-violet-50/40"} hover:bg-violet-50`
+                      }`}
+                    >
+                      <td className="px-3 py-2.5 min-w-[220px]">
+                        <div className="flex items-center gap-3 min-w-0">
+                          {ad.thumbnail ? (
+                            <img src={ad.thumbnail} alt="" className="w-9 h-9 rounded-lg object-cover bg-black/10" />
+                          ) : (
+                            <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${dark ? "bg-white/[0.05]" : "bg-slate-100"}`}>
+                              <span className={`text-[10px] ${dark ? "text-white/30" : "text-slate-400"}`}>VID</span>
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <p className={`truncate text-[12px] font-semibold ${dark ? "text-white/80" : "text-slate-800"}`}>
+                              {ad.name}
+                            </p>
+                            <p className={`truncate text-[10px] ${dark ? "text-white/35" : "text-slate-400"}`}>
+                              {ad.campaignName}
+                            </p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                        <MetricCell value={fmtMoney(ins.spend)} dark={dark} />
+                      </td>
+                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                        <MetricCell value={fmt(ins.impressions)} dark={dark} />
+                      </td>
+                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                        <MetricCell value={fmt(ins.videoViews)} dark={dark} />
+                      </td>
+                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                        <MetricCell value={fmtPct(ins.hookRate)} highlight={getHookHighlight(ins.hookRate)} dark={dark} />
+                      </td>
+                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                        <MetricCell value={fmtPct(ins.skipRate)} highlight={getSkipHighlight(ins.skipRate)} dark={dark} />
+                      </td>
+                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                        <MetricCell value={fmtSeconds(ins.videoAvgWatchTime)} dark={dark} />
+                      </td>
+                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                        <MetricCell
+                          value={ins.holdRate50 > 0 ? fmtPct(ins.holdRate50) : "-"}
+                          highlight={ins.holdRate50 > 0 ? getHoldHighlight(ins.holdRate50) : null}
+                          dark={dark}
+                        />
+                      </td>
+                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                        <MetricCell value={fmtPct(ins.ctr)} highlight={getCTRHighlight(ins.ctr)} dark={dark} />
+                      </td>
+                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                        <MetricCell value={fmtMoney(ins.cpm)} dark={dark} />
+                      </td>
+                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                        <MetricCell value={ins.leads > 0 ? fmt(ins.leads) : "-"} highlight={ins.leads > 0 ? "good" : null} dark={dark} />
+                      </td>
+                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                        <MetricCell value={ins.cpl > 0 ? fmtMoney(ins.cpl) : "-"} highlight={ins.cpl > 0 ? getCPLHighlight(ins.cpl) : null} dark={dark} />
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide ${verdictColor}`}>
+                          {verdict}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function exportCSV(ads: Ad[], client: string, from: string, to: string) {
   const headers = [
     "Ad Name", "Status", "Campaign", "Ad Set",
     "Spend", "Reach", "Impressions", "Clicks", "CTR", "CPM", "CPC",
     "Leads", "CPL", "Landing Page Views", "Post Engagements",
-    "Likes", "Comments", "Shares", "Video Views",
+    "Likes", "Comments", "Shares", "Video Views", "Hook Rate", "Skip Rate",
+    "Avg Watch Time", "50% Hold Rate", "Completion Rate",
   ];
 
   const escape = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`;
@@ -633,6 +926,11 @@ function exportCSV(ads: Ad[], client: string, from: string, to: string) {
     ad.insights.comments,
     ad.insights.shares,
     ad.insights.videoViews,
+    ad.insights.hookRate.toFixed(2),
+    ad.insights.skipRate.toFixed(2),
+    ad.insights.videoAvgWatchTime != null ? ad.insights.videoAvgWatchTime.toFixed(1) : "",
+    ad.insights.holdRate50.toFixed(2),
+    ad.insights.completionRate.toFixed(2),
   ]);
 
   const content = [headers, ...rows].map((row) => row.map(escape).join(",")).join("\n");
@@ -735,7 +1033,7 @@ async function exportPDF(
       "Ad Name", "Campaign", "Ad Set",
       "Spend", "Reach", "Impressions", "Clicks", "CTR", "CPM", "CPC",
       "Leads", "CPL", "LP Views", "Engagements",
-      "Likes", "Comments", "Shares", "Vid Views",
+      "Likes", "Comments", "Shares", "Vid Views", "Hook", "Skip", "Avg Watch",
     ]],
     body: ads.map((ad) => [
       ad.name,
@@ -756,8 +1054,11 @@ async function exportPDF(
       fmt(ad.insights.comments),
       fmt(ad.insights.shares),
       fmt(ad.insights.videoViews),
+      fmtPct(ad.insights.hookRate),
+      fmtPct(ad.insights.skipRate),
+      fmtSeconds(ad.insights.videoAvgWatchTime),
     ]),
-    styles: { fontSize: 6, cellPadding: 1.8, overflow: "linebreak" },
+    styles: { fontSize: 5.5, cellPadding: 1.5, overflow: "linebreak" },
     headStyles: { fillColor: [29, 78, 216], textColor: [255, 255, 255], fontStyle: "bold" },
     alternateRowStyles: { fillColor: [248, 250, 252] },
     columnStyles: {
@@ -1042,10 +1343,6 @@ const totalSpend = summary.totalSpend;
 const totalReach = summary.totalReach;
 const totalImpressions = summary.totalImpressions;
 const totalClicks = summary.totalClicks;
-const totalLikes = summary.totalLikes;
-const totalComments = summary.totalComments;
-const totalShares = summary.totalShares;
-const totalVideoViews = summary.totalVideoViews;
 const totalLeads = summary.totalLeads;
 const totalLandingPageViews = summary.totalLandingPageViews;
 const totalPostEngagements = summary.totalPostEngagements;
@@ -1056,6 +1353,7 @@ const overallCPL = summary.overallCPL;
 const activeAds = summary.activeAds;
 const adsInPeriod = summary.adsInPeriod;
 const filteredCampaigns = filterCampaignsByAds(campaigns, filteredAds);
+const performanceReels = allAds.filter((ad) => ad.isVideo || ad.insights.videoViews > 0);
 
   const fromLabel = new Date(from).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
   const toLabel = new Date(to).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
@@ -1487,6 +1785,12 @@ const filteredCampaigns = filterCampaignsByAds(campaigns, filteredAds);
     }
   />
 </div>
+
+      <PerformanceReelsPanel
+        reels={performanceReels}
+        dark={dark}
+        onRowClick={(ad) => setSelectedAd(ad)}
+      />
 
       <div className="flex flex-col gap-3">
         <div className="flex flex-col lg:flex-row lg:items-center gap-3 lg:justify-between">

@@ -15,6 +15,10 @@ const BENCHMARKS = {
   engagementRate: { good: 3, ok: 1, unit: "%" },
   // video view rate = videoViews / impressions * 100
   videoViewRate: { good: 15, ok: 8, unit: "%" },
+  // hook rate = 3s video views / impressions * 100
+  hookRate: { good: 25, ok: 12, unit: "%" },
+  // paid skip rate is derived as 100 - hook rate
+  skipRate: { good: 75, ok: 88, unit: "%" },
 };
 
 function flag(value: number, bench: { good: number; ok: number }, lowerIsBetter = false) {
@@ -67,6 +71,12 @@ export interface AnalyzedAd {
   comments: number;
   shares: number;
   videoViews: number;
+  hookRate: number;
+  skipRate: number;
+  avgWatchTime: number | null;
+  holdRate50: number;
+  completionRate: number;
+  thruPlays: number;
   landingPageViews: number;
   postEngagements: number;
   engagementRate: number;
@@ -137,6 +147,11 @@ export interface ReportPayload {
     avgCPM: number;
     avgCPC: number;
     avgCPL: number;
+    avgVideoHookRate: number;
+    avgVideoSkipRate: number;
+    avgVideoWatchTime: number | null;
+    avgVideoHoldRate50: number;
+    avgVideoCompletionRate: number;
   };
   benchmarks: typeof BENCHMARKS;
   campaigns: CampaignSummary[];
@@ -152,6 +167,9 @@ export interface ReportPayload {
     bestCPL: AnalyzedAd[];
     worstCPL: AnalyzedAd[];
     topVideoViews: AnalyzedAd[];
+    bestHookRate: AnalyzedAd[];
+    worstSkipRate: AnalyzedAd[];
+    bestAvgWatchTime: AnalyzedAd[];
     highSpendLowReturn: AnalyzedAd[]; // high spend, zero/low leads
     bestEngagement: AnalyzedAd[];
   };
@@ -243,6 +261,12 @@ export function buildReportPayload(
       comments: ins.comments,
       shares: ins.shares,
       videoViews: ins.videoViews,
+      hookRate: round(ins.hookRate),
+      skipRate: round(ins.skipRate),
+      avgWatchTime: ins.videoAvgWatchTime != null ? round(ins.videoAvgWatchTime, 1) : null,
+      holdRate50: round(ins.holdRate50),
+      completionRate: round(ins.completionRate),
+      thruPlays: ins.thruPlays,
       landingPageViews: ins.landingPageViews,
       postEngagements: ins.postEngagements,
       engagementRate: round(engagementRate),
@@ -361,6 +385,16 @@ export function buildReportPayload(
       });
     }
 
+    if (ad.isVideo && ad.hookRate < BENCHMARKS.hookRate.ok && ad.spend > 100) {
+      redFlags.push({
+        adId: ad.id,
+        adName: ad.name,
+        issue: "Weak Reel hook rate - most impressions are skipping before 3 seconds",
+        severity: "high",
+        data: `Hook rate: ${ad.hookRate}%, derived skip rate: ${ad.skipRate}%, spend: INR ${ad.spend}`,
+      });
+    }
+
     // Medium: high CPC
     if (ad.cpc > BENCHMARKS.cpc.ok && ad.spend > 100) {
       redFlags.push({
@@ -412,11 +446,41 @@ export function buildReportPayload(
   }
 
   // ── Average metrics ───────────────────────────────────────────────────────
+  for (const ad of analyzedAds) {
+    if (ad.isVideo && ad.hookRate >= BENCHMARKS.hookRate.good) {
+      positives.push({
+        adId: ad.id,
+        adName: ad.name,
+        highlight: "Strong Reel hook rate - first 3 seconds are stopping the scroll",
+        data: `Hook rate: ${ad.hookRate}%, derived skip rate: ${ad.skipRate}%, avg watch: ${ad.avgWatchTime ?? "N/A"}s`,
+      });
+    }
+  }
+
   const adsN = analyzedAds.length || 1;
   const avgCTR = round(analyzedAds.reduce((s, a) => s + a.ctr, 0) / adsN);
   const avgCPM = round(analyzedAds.reduce((s, a) => s + a.cpm, 0) / adsN);
   const avgCPC = round(adsWithCPC.reduce((s, a) => s + a.cpc, 0) / (adsWithCPC.length || 1));
   const avgCPL = round(adsWithLeads.reduce((s, a) => s + a.cpl, 0) / (adsWithLeads.length || 1));
+  const videoImpressions = videoAds.reduce((s, a) => s + a.impressions, 0);
+  const videoViews = videoAds.reduce((s, a) => s + a.videoViews, 0);
+  const avgVideoHookRate = round(pct(videoViews, videoImpressions));
+  const avgVideoSkipRate = videoImpressions > 0 ? round(Math.max(0, 100 - avgVideoHookRate)) : 0;
+  const videoAdsWithWatch = videoAds.filter((a) => a.avgWatchTime != null);
+  const avgVideoWatchTime =
+    videoAdsWithWatch.length > 0
+      ? round(
+          videoAdsWithWatch.reduce((s, a) => s + (a.avgWatchTime || 0), 0) /
+            videoAdsWithWatch.length,
+          1
+        )
+      : null;
+  const avgVideoHoldRate50 = round(
+    videoAds.reduce((s, a) => s + a.holdRate50, 0) / (videoAds.length || 1)
+  );
+  const avgVideoCompletionRate = round(
+    videoAds.reduce((s, a) => s + a.completionRate, 0) / (videoAds.length || 1)
+  );
 
   return {
     meta: {
@@ -457,6 +521,11 @@ export function buildReportPayload(
       avgCPM,
       avgCPC,
       avgCPL,
+      avgVideoHookRate,
+      avgVideoSkipRate,
+      avgVideoWatchTime,
+      avgVideoHoldRate50,
+      avgVideoCompletionRate,
     },
     benchmarks: BENCHMARKS,
     campaigns: campaignSummaries,
@@ -472,6 +541,13 @@ export function buildReportPayload(
       bestCPL: topN(adsWithLeads, (a) => a.cpl, 5, true),
       worstCPL: topN(adsWithLeads, (a) => a.cpl, 5),
       topVideoViews: topN(videoAds, (a) => a.videoViews, 5),
+      bestHookRate: topN(videoAds.filter((a) => a.impressions > 500), (a) => a.hookRate, 5),
+      worstSkipRate: topN(videoAds.filter((a) => a.impressions > 500), (a) => a.skipRate, 5),
+      bestAvgWatchTime: topN(
+        videoAds.filter((a) => a.avgWatchTime != null),
+        (a) => a.avgWatchTime || 0,
+        5
+      ),
       highSpendLowReturn: highSpendNoLead,
       bestEngagement: topN(adsWithSpend.filter((a) => a.reach > 200), (a) => a.engagementRate, 5),
     },

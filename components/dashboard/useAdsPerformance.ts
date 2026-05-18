@@ -14,6 +14,17 @@ export interface AdInsight {
   comments: number;
   shares: number;
   videoViews: number;
+  hookRate: number;
+  skipRate: number;
+  videoAvgWatchTime: number | null;
+  videoP25: number;
+  videoP50: number;
+  videoP75: number;
+  videoP95: number;
+  videoP100: number;
+  thruPlays: number;
+  holdRate50: number;
+  completionRate: number;
   leads: number;
   cpl: number;
   roas: number;
@@ -119,6 +130,14 @@ type MetaInsight = {
   inline_link_clicks?: string;
   actions?: MetaAction[];
   action_values?: MetaAction[];
+  video_play_actions?: MetaAction[];
+  video_avg_time_watched_actions?: MetaAction[];
+  video_p25_watched_actions?: MetaAction[];
+  video_p50_watched_actions?: MetaAction[];
+  video_p75_watched_actions?: MetaAction[];
+  video_p95_watched_actions?: MetaAction[];
+  video_p100_watched_actions?: MetaAction[];
+  video_thruplay_watched_actions?: MetaAction[];
   account_currency?: string;
   cpm?: string;
   ctr?: string;
@@ -153,9 +172,15 @@ function getSaneActionExact(
   return maxReasonable > 0 && value > maxReasonable ? 0 : value;
 }
 
-function getActionMax(actions: MetaAction[] | undefined, ...types: string[]): number {
-  if (!actions) return 0;
-  return Math.max(...types.map((type) => getActionExact(actions, type)), 0);
+function getAnyActionValue(actions: MetaAction[] | undefined): number {
+  if (!actions?.length) return 0;
+  return Math.max(
+    ...actions.map((action) => {
+      const value = parseFloat(String(action.value || "0"));
+      return Number.isFinite(value) ? value : 0;
+    }),
+    0
+  );
 }
 
 function sumActions(actions: MetaAction[] | undefined, ...types: string[]): number {
@@ -221,12 +246,44 @@ function buildInsight(ins: MetaInsight | undefined): AdInsight {
     "post_share"
   );
 
-  const videoViews = getActionExact(
-    ins?.actions,
-    "video_view",
-    "video_play",
-    "video_watched"
+  const videoViews = Math.max(
+    getActionExact(
+      ins?.actions,
+      "video_view",
+      "video_play",
+      "video_watched"
+    ),
+    Math.round(getAnyActionValue(ins?.video_play_actions))
   );
+
+  const videoP25 = Math.round(getAnyActionValue(ins?.video_p25_watched_actions));
+  const videoP50 = Math.round(getAnyActionValue(ins?.video_p50_watched_actions));
+  const videoP75 = Math.round(getAnyActionValue(ins?.video_p75_watched_actions));
+  const videoP95 = Math.round(getAnyActionValue(ins?.video_p95_watched_actions));
+  const videoP100 = Math.round(getAnyActionValue(ins?.video_p100_watched_actions));
+  const thruPlays = Math.round(getAnyActionValue(ins?.video_thruplay_watched_actions));
+
+  const rawAvgWatchTime = getAnyActionValue(ins?.video_avg_time_watched_actions);
+  const normalizedAvgWatchTime =
+    rawAvgWatchTime > 600 ? rawAvgWatchTime / 1000 : rawAvgWatchTime;
+  const videoAvgWatchTime =
+    normalizedAvgWatchTime > 0 ? parseFloat(normalizedAvgWatchTime.toFixed(1)) : null;
+  const hookRate =
+    impressions > 0 && videoViews > 0
+      ? parseFloat(((videoViews / impressions) * 100).toFixed(2))
+      : 0;
+  const skipRate =
+    impressions > 0 && videoViews > 0
+      ? parseFloat(Math.max(0, 100 - hookRate).toFixed(2))
+      : 0;
+  const holdRate50 =
+    videoViews > 0 && videoP50 > 0
+      ? parseFloat(((videoP50 / videoViews) * 100).toFixed(2))
+      : 0;
+  const completionRate =
+    videoViews > 0 && Math.max(videoP95, videoP100) > 0
+      ? parseFloat(((Math.max(videoP95, videoP100) / videoViews) * 100).toFixed(2))
+      : 0;
 
   const purchaseValue = sumActions(
     ins?.action_values,
@@ -259,6 +316,17 @@ function buildInsight(ins: MetaInsight | undefined): AdInsight {
     comments,
     shares,
     videoViews,
+    hookRate,
+    skipRate,
+    videoAvgWatchTime,
+    videoP25,
+    videoP50,
+    videoP75,
+    videoP95,
+    videoP100,
+    thruPlays,
+    holdRate50,
+    completionRate,
     leads,
     cpl,
     roas,
@@ -359,8 +427,12 @@ export function useAdsPerformance(
 
       const baseInsightFields =
         "spend,reach,impressions,clicks,actions,action_values,account_currency,cpm,ctr";
-      const adInsightFields =
+      const videoInsightFields =
+        "video_play_actions,video_avg_time_watched_actions,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p95_watched_actions,video_p100_watched_actions,video_thruplay_watched_actions";
+      const baseAdInsightFields =
         `ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,${baseInsightFields}`;
+      const enhancedAdInsightFields =
+        `${baseAdInsightFields},${videoInsightFields}`;
 
       // REPLACE the account insight fetch block:
 let accountInsightData: AdInsight | null = null;
@@ -381,15 +453,29 @@ console.log("[bludash] account actions:", JSON.stringify(json.data?.[0]?.actions
 }
 
 
-      const allInsights = await fetchAllPages<MetaInsight>(
-        `${BASE}/${cfg.adAccountId}/insights?${buildInsightsParams(
-          adInsightFields,
-          from,
-          to,
-          cfg.token,
-          "ad"
-        ).toString()}`
-      );
+      let allInsights: MetaInsight[];
+      try {
+        allInsights = await fetchAllPages<MetaInsight>(
+          `${BASE}/${cfg.adAccountId}/insights?${buildInsightsParams(
+            enhancedAdInsightFields,
+            from,
+            to,
+            cfg.token,
+            "ad"
+          ).toString()}`
+        );
+      } catch (e) {
+        console.warn("[bludash] enhanced video insight fields failed, retrying base fields:", e);
+        allInsights = await fetchAllPages<MetaInsight>(
+          `${BASE}/${cfg.adAccountId}/insights?${buildInsightsParams(
+            baseAdInsightFields,
+            from,
+            to,
+            cfg.token,
+            "ad"
+          ).toString()}`
+        );
+      }
 
       const periodInsights = allInsights.filter(
         (ins): ins is MetaInsight & { ad_id: string } => Boolean(ins.ad_id)
