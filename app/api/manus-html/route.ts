@@ -123,7 +123,7 @@ From reportData.creativeDeepDive.formatAnalysis
 
 REEL / VIDEO PERFORMANCE TABLE:
 Render this inside Section 5 if payload.ads has any isVideo=true rows.
-Columns: Ad Name | Spend | CTR | CPM | Leads | CPL | Hook Rate | Skip Rate | Avg Watch | 50% Hold | Completion
+Columns: Ad Name | Spend | Views | CTR | CPM | Leads | CPL | Hook Rate | Skip Rate (include people count in parentheses) | Avg Watch | 50% Hold (include people count in parentheses) | Completion
 Use payload.ads values directly. Color Hook Rate: >=25 emerald, >=12 amber, <12 red. Color Skip Rate: <=75 emerald, <=88 amber, >88 red. This table must diagnose first-3-second Reel performance, not just delivery.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

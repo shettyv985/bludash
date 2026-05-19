@@ -17,7 +17,11 @@ interface Post {
   comments: number;
   shares: number;
   saves: number;
+  views: number;
   engagementRate: string;
+  avgWatchTime?: number | null;
+  skipRate?: number | null;
+  holdRate?: number | null;
 }
 
 interface Props {
@@ -62,6 +66,16 @@ function StatBox({
   );
 }
 
+function peopleFromRate(views: number, rate?: number | null): number {
+  if (!views || rate == null) return 0;
+  return Math.round((views * rate) / 100);
+}
+
+function rateWithPeople(rate: number | null | undefined, views: number): string {
+  if (rate == null) return "—";
+  return `${rate}% (${peopleFromRate(views, rate).toLocaleString()})`;
+}
+
 export default function PostModal({
   post, boosted, onClose, dark, showSaves, platform, token,
 }: Props) {
@@ -99,6 +113,7 @@ export default function PostModal({
   const isReel      = post.type === "REEL";
   const isBoosted   = !!boosted;
   const amountSpent = boosted ? parseFloat(boosted.amountSpent) : 0;
+  const displayAvgWatchTime = avgWatchTime ?? post.avgWatchTime ?? null;
 
   const date = new Date(post.createdTime).toLocaleDateString("en-IN", {
     day: "2-digit", month: "long", year: "numeric",
@@ -336,6 +351,14 @@ export default function PostModal({
               {showSaves && (
                 <StatBox label="Saves" value={post.saves.toLocaleString()} dark={dark} />
               )}
+              {isReel && (
+                <StatBox
+                  label="Views"
+                  value={post.views > 0 ? post.views.toLocaleString() : "—"}
+                  dark={dark}
+                  accent={post.views > 0 ? (dark ? "text-purple-400" : "text-purple-600") : undefined}
+                />
+              )}
               <StatBox
                 label="Eng. Rate"
                 value={`${post.engagementRate}%`}
@@ -345,15 +368,43 @@ export default function PostModal({
                     ? dark ? "text-emerald-400" : "text-emerald-600"
                     : parseFloat(post.engagementRate) >= 1
                     ? dark ? "text-yellow-400" : "text-yellow-600"
-                    : dark ? "text-red-400" : "text-red-600"
+                  : dark ? "text-red-400" : "text-red-600"
                 }
               />
-              {avgWatchTime !== null && (
+              {displayAvgWatchTime !== null && (
                 <StatBox
                   label="Avg Watch"
-                  value={`${avgWatchTime}s`}
+                  value={`${displayAvgWatchTime}s`}
                   dark={dark}
                   accent={dark ? "text-purple-400" : "text-purple-600"}
+                />
+              )}
+              {isReel && post.skipRate != null && (
+                <StatBox
+                  label="Skip Rate"
+                  value={rateWithPeople(post.skipRate, post.views)}
+                  dark={dark}
+                  accent={
+                    post.skipRate > 50
+                      ? dark ? "text-red-400" : "text-red-600"
+                      : post.skipRate > 25
+                      ? dark ? "text-yellow-400" : "text-yellow-600"
+                      : dark ? "text-emerald-400" : "text-emerald-600"
+                  }
+                />
+              )}
+              {isReel && post.holdRate != null && (
+                <StatBox
+                  label="Hold Rate"
+                  value={rateWithPeople(post.holdRate, post.views)}
+                  dark={dark}
+                  accent={
+                    post.holdRate >= 75
+                      ? dark ? "text-emerald-400" : "text-emerald-600"
+                      : post.holdRate >= 50
+                      ? dark ? "text-yellow-400" : "text-yellow-600"
+                      : dark ? "text-red-400" : "text-red-600"
+                  }
                 />
               )}
             </div>

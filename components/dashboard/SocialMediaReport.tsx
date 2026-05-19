@@ -23,9 +23,11 @@ interface Post {
   comments: number;
   shares: number;
   saves: number;
+  views: number;
   engagementRate: string;
   avgWatchTime?: number | null;
   skipRate?: number | null; // reels_skip_rate — % of viewers who skipped in first 3s
+  holdRate?: number | null;
 }
 
 interface ReportData {
@@ -83,6 +85,16 @@ function insightNumber(value: any): number {
   if (typeof value === "string") return Number(value) || 0;
   if (typeof value?.value === "number") return value.value;
   return 0;
+}
+
+function peopleFromRate(views: number, rate?: number | null): number {
+  if (!views || rate == null) return 0;
+  return Math.round((views * rate) / 100);
+}
+
+function rateWithPeople(rate: number | null | undefined, views: number): string {
+  if (rate == null) return "—";
+  return `${rate}% (${peopleFromRate(views, rate).toLocaleString()})`;
 }
 
 function sumInsightMetric(metric: any): number {
@@ -265,7 +277,10 @@ function exportCSV(params: {
       "Likes",
       "Comments",
       "Shares",
+      "Views",
       "Reach",
+      "Skip People",
+      "Hold People",
       "Eng. Rate (%)",
       "Boosted",
       "Amount Spent",
@@ -286,7 +301,10 @@ function exportCSV(params: {
         p.likes,
         p.comments,
         p.shares,
+        p.type === "REEL" ? p.views : "",
         p.reach + (b?.reach || 0),
+        p.type === "REEL" ? peopleFromRate(p.views, p.skipRate) : "",
+        p.type === "REEL" ? peopleFromRate(p.views, p.holdRate) : "",
         p.engagementRate,
         b ? "Yes" : "No",
         b ? parseFloat(b.amountSpent).toLocaleString() : "",
@@ -314,10 +332,14 @@ function exportCSV(params: {
       "Comments",
       "Shares",
       "Saves",
+      "Views",
       "Reach",
       "Eng. Rate (%)",
       "Avg Watch (s)",
       "Skip Rate (%)",
+      "Hold Rate (%)",
+      "Skip People",
+      "Hold People",
       "Boosted",
       "Amount Spent",
       "Paid Reach",
@@ -341,10 +363,14 @@ function exportCSV(params: {
         p.comments + (b?.paidComments || 0),
         p.shares + (b?.paidShares || 0),
         p.saves,
+        p.type === "REEL" ? p.views : "",
         p.reach + (b?.reach || 0),
         p.engagementRate,
         p.type === "REEL" && p.avgWatchTime != null ? p.avgWatchTime : "",
         p.type === "REEL" && p.skipRate != null ? p.skipRate : "",
+        p.type === "REEL" && p.holdRate != null ? p.holdRate : "",
+        p.type === "REEL" ? peopleFromRate(p.views, p.skipRate) : "",
+        p.type === "REEL" ? peopleFromRate(p.views, p.holdRate) : "",
         b ? "Yes" : "No",
         b ? parseFloat(b.amountSpent).toLocaleString() : "",
         b ? b.reach : "",
@@ -564,7 +590,7 @@ async function exportPDF(params: {
 
   const fbTableBody =
     fbPosts.length === 0
-      ? [["No Facebook posts in this period.", "", "", "", "", "", "", "", "", ""]]
+      ? [["No Facebook posts in this period.", "", "", "", "", "", "", "", "", "", "", "", ""]]
       : fbPosts.map((p) => {
         const b = matchBoosted(p, boostedMap);
         return [
@@ -578,7 +604,10 @@ async function exportPDF(params: {
           p.likes.toLocaleString(),
           p.comments.toLocaleString(),
           p.shares.toLocaleString(),
+          p.type === "REEL" ? p.views.toLocaleString() : "\u2014",
           (p.reach + (b?.reach || 0)).toLocaleString(),
+          p.type === "REEL" ? peopleFromRate(p.views, p.skipRate).toLocaleString() : "\u2014",
+          p.type === "REEL" ? peopleFromRate(p.views, p.holdRate).toLocaleString() : "\u2014",
           `${p.engagementRate}%`,
           b ? `Yes\n\u20B9${parseFloat(b.amountSpent).toLocaleString()}` : "\u2014",
           p.permalink,
@@ -594,7 +623,10 @@ async function exportPDF(params: {
       "Likes",
       "Comments",
       "Shares",
+      "Views",
       "Reach",
+      "Skip #",
+      "Hold #",
       "Eng.%",
       "Boosted",
       "Post Link",
@@ -622,20 +654,23 @@ async function exportPDF(params: {
       3: { cellWidth: 14, halign: "right" },
       4: { cellWidth: 16, halign: "right" },
       5: { cellWidth: 14, halign: "right" },
-      6: { cellWidth: 18, halign: "right" },
-      7: { cellWidth: 14, halign: "right" },
-      8: { cellWidth: 20 },
-      9: { cellWidth: 50, textColor: [29, 78, 216] as [number, number, number] },
+      6: { cellWidth: 16, halign: "right" },
+      7: { cellWidth: 18, halign: "right" },
+      8: { cellWidth: 14, halign: "right" },
+      9: { cellWidth: 14, halign: "right" },
+      10: { cellWidth: 14, halign: "right" },
+      11: { cellWidth: 20 },
+      12: { cellWidth: 39, textColor: [29, 78, 216] as [number, number, number] },
     },
     didDrawCell: (data) => {
-      if (data.section === "body" && data.column.index === 9 && fbPosts.length > 0) {
+      if (data.section === "body" && data.column.index === 12 && fbPosts.length > 0) {
         const rowIdx = data.row.index;
         if (rowIdx < fbPosts.length) {
           const link = fbPosts[rowIdx].permalink;
           if (link) doc.link(data.cell.x, data.cell.y, data.cell.width, data.cell.height, { url: link });
         }
       }
-      if (data.section === "body" && data.column.index === 8 && fbPosts.length > 0) {
+      if (data.section === "body" && data.column.index === 11 && fbPosts.length > 0) {
         const rowIdx = data.row.index;
         if (rowIdx < fbPosts.length && matchBoosted(fbPosts[rowIdx], boostedMap)) {
           doc.setFillColor(...AMBER_LIGHT);
@@ -676,6 +711,17 @@ async function exportPDF(params: {
 
   // Reel-specific aggregates for PDF summary
   const reelPosts = igPosts.filter((p) => p.type === "REEL");
+  const totalReelViews = reelPosts.reduce((s, p) => s + p.views, 0);
+  const reelsWithHold = reelPosts.filter((p) => p.holdRate != null);
+  const avgHoldOverall =
+    reelsWithHold.length > 0
+      ? parseFloat(
+        (
+          reelsWithHold.reduce((s, p) => s + (p.holdRate ?? 0), 0) /
+          reelsWithHold.length
+        ).toFixed(1)
+      )
+      : null;
   const reelsWithWatch = reelPosts.filter((p) => p.avgWatchTime != null);
   const avgWatchOverall =
     reelsWithWatch.length > 0
@@ -685,6 +731,8 @@ async function exportPDF(params: {
       )
       : null;
   const reelsWithSkip = reelPosts.filter((p) => p.skipRate != null);
+  const totalSkippedPeople = reelPosts.reduce((s, p) => s + peopleFromRate(p.views, p.skipRate), 0);
+  const totalHeldPeople = reelPosts.reduce((s, p) => s + peopleFromRate(p.views, p.holdRate), 0);
   const avgSkipOverall =
     reelsWithSkip.length > 0
       ? parseFloat(
@@ -722,11 +770,17 @@ async function exportPDF(params: {
       color: PURPLE,
     },
     { label: "Posts", value: igPosts.length.toString() },
+    ...(reelPosts.length > 0
+      ? [{ label: "Reel Views", value: totalReelViews > 0 ? totalReelViews.toLocaleString() : "\u2014", sub: `Across ${reelPosts.length} reels`, color: PURPLE }]
+      : []),
     ...(avgWatchOverall != null
       ? [{ label: "Avg Watch", value: `${avgWatchOverall}s`, sub: `Across ${reelsWithWatch.length} reels`, color: PURPLE }]
       : []),
     ...(avgSkipOverall != null
-      ? [{ label: "Avg Skip Rate", value: `${avgSkipOverall}%`, sub: `Across ${reelsWithSkip.length} reels`, color: avgSkipOverall > 50 ? RED : avgSkipOverall > 25 ? AMBER : GREEN }]
+      ? [{ label: "Avg Skip Rate", value: `${avgSkipOverall}% (${totalSkippedPeople.toLocaleString()})`, sub: `Skipped people across ${reelsWithSkip.length} reels`, color: avgSkipOverall > 50 ? RED : avgSkipOverall > 25 ? AMBER : GREEN }]
+      : []),
+    ...(avgHoldOverall != null
+      ? [{ label: "Avg Hold Rate", value: `${avgHoldOverall}% (${totalHeldPeople.toLocaleString()})`, sub: `Held people across ${reelsWithHold.length} reels`, color: avgHoldOverall >= 75 ? GREEN : avgHoldOverall >= 50 ? AMBER : RED }]
       : []),
   ]);
 
@@ -744,7 +798,7 @@ async function exportPDF(params: {
 
   const igTableBody =
     igPosts.length === 0
-      ? [["No Instagram posts in this period.", "", "", "", "", "", "", "", "", "", "", ""]]
+      ? [["No Instagram posts in this period.", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]]
       : igPosts.map((p) => {
         const b = matchBoosted(p, boostedMap);
         const totalLikes = p.likes + (b?.paidLikes || 0);
@@ -764,9 +818,11 @@ async function exportPDF(params: {
           totalShares.toLocaleString(),
           p.saves.toLocaleString(),
           totalReach.toLocaleString(),
+          p.type === "REEL" ? p.views.toLocaleString() : "\u2014",
           `${p.engagementRate}%`,
           p.type === "REEL" && p.avgWatchTime != null ? `${p.avgWatchTime}s` : "\u2014",
-          p.type === "REEL" && p.skipRate != null ? `${p.skipRate}%` : "\u2014",
+          p.type === "REEL" ? rateWithPeople(p.skipRate, p.views) : "\u2014",
+          p.type === "REEL" ? rateWithPeople(p.holdRate, p.views) : "\u2014",
           b ? `Yes\n\u20B9${parseFloat(b.amountSpent).toLocaleString()}` : "\u2014",
           p.permalink,
         ];
@@ -783,9 +839,11 @@ async function exportPDF(params: {
       "Shares",
       "Saves",
       "Reach",
+      "Views",
       "Eng.%",
       "Avg Watch",
       "Skip %",
+      "Hold %",
       "Boosted",
       "Post Link",
     ]],
@@ -806,29 +864,31 @@ async function exportPDF(params: {
     },
     alternateRowStyles: { fillColor: [248, 249, 252] as [number, number, number] },
     columnStyles: {
-      0: { cellWidth: 22 },
-      1: { cellWidth: 16 },
-      2: { cellWidth: 50 },
-      3: { cellWidth: 12, halign: "right" },
-      4: { cellWidth: 16, halign: "right" },
-      5: { cellWidth: 12, halign: "right" },
-      6: { cellWidth: 12, halign: "right" },
-      7: { cellWidth: 16, halign: "right" },
-      8: { cellWidth: 11, halign: "right" },
-      9: { cellWidth: 14, halign: "right" },
+      0: { cellWidth: 20 },
+      1: { cellWidth: 12 },
+      2: { cellWidth: 42 },
+      3: { cellWidth: 10, halign: "right" },
+      4: { cellWidth: 14, halign: "right" },
+      5: { cellWidth: 10, halign: "right" },
+      6: { cellWidth: 10, halign: "right" },
+      7: { cellWidth: 14, halign: "right" },
+      8: { cellWidth: 14, halign: "right" },
+      9: { cellWidth: 10, halign: "right" },
       10: { cellWidth: 12, halign: "right" },
-      11: { cellWidth: 20 },
-      12: { cellWidth: 42, textColor: [124, 58, 237] as [number, number, number] },
+      11: { cellWidth: 16, halign: "right" },
+      12: { cellWidth: 16, halign: "right" },
+      13: { cellWidth: 16 },
+      14: { cellWidth: 28, textColor: [124, 58, 237] as [number, number, number] },
     },
     didDrawCell: (data) => {
-      if (data.section === "body" && data.column.index === 12 && igPosts.length > 0) {
+      if (data.section === "body" && data.column.index === 14 && igPosts.length > 0) {
         const rowIdx = data.row.index;
         if (rowIdx < igPosts.length) {
           const link = igPosts[rowIdx].permalink;
           if (link) doc.link(data.cell.x, data.cell.y, data.cell.width, data.cell.height, { url: link });
         }
       }
-      if (data.section === "body" && data.column.index === 11 && igPosts.length > 0) {
+      if (data.section === "body" && data.column.index === 13 && igPosts.length > 0) {
         const rowIdx = data.row.index;
         if (rowIdx < igPosts.length && matchBoosted(igPosts[rowIdx], boostedMap)) {
           doc.setFillColor(...AMBER_LIGHT);
@@ -1158,6 +1218,7 @@ function SummarySection({
 
   // ── Reel aggregates (IG only) ────────────────────────────────────
   const reelPosts = isFB ? [] : posts.filter((p) => p.type === "REEL");
+  const totalReelViews = reelPosts.reduce((s, p) => s + p.views, 0);
   const reelsWithWatch = reelPosts.filter((p) => p.avgWatchTime != null);
   const avgWatchOverall =
     reelsWithWatch.length > 0
@@ -1166,7 +1227,19 @@ function SummarySection({
         reelsWithWatch.length
       )
       : null;
+  const reelsWithHold = reelPosts.filter((p) => p.holdRate != null);
+  const avgHoldOverall =
+    reelsWithHold.length > 0
+      ? parseFloat(
+        (
+          reelsWithHold.reduce((s, p) => s + (p.holdRate ?? 0), 0) /
+          reelsWithHold.length
+        ).toFixed(1)
+      )
+      : null;
   const reelsWithSkip = reelPosts.filter((p) => p.skipRate != null);
+  const totalSkippedPeople = reelPosts.reduce((s, p) => s + peopleFromRate(p.views, p.skipRate), 0);
+  const totalHeldPeople = reelPosts.reduce((s, p) => s + peopleFromRate(p.views, p.holdRate), 0);
   const avgSkipOverall =
     reelsWithSkip.length > 0
       ? parseFloat(
@@ -1307,6 +1380,22 @@ function SummarySection({
                 </p>
               </div>
 
+              {/* Total reel views */}
+              <div className={`rounded-[20px] border px-4 py-4 ${dark ? "border-white/[0.08] bg-white/[0.03]" : "border-fuchsia-100 bg-white/90"}`}>
+                <p className={`text-[11px] font-semibold uppercase tracking-[0.14em] ${dark ? "text-white/40" : "text-slate-500"}`}>
+                  Reel Views
+                </p>
+                <p className={`text-[26px] font-bold mt-2 tabular-nums ${totalReelViews > 0
+                    ? dark ? "text-fuchsia-300" : "text-fuchsia-700"
+                    : dark ? "text-white/25" : "text-slate-300"
+                  }`}>
+                  {totalReelViews > 0 ? totalReelViews.toLocaleString() : "—"}
+                </p>
+                <p className={`text-[10px] mt-1 ${dark ? "text-white/30" : "text-slate-400"}`}>
+                  total views across reels
+                </p>
+              </div>
+
               {/* Avg Engagement Rate across reels */}
               <div className={`rounded-[20px] border px-4 py-4 ${dark ? "border-white/[0.08] bg-white/[0.03]" : "border-fuchsia-100 bg-white/90"}`}>
                 <p className={`text-[11px] font-semibold uppercase tracking-[0.14em] ${dark ? "text-white/40" : "text-slate-500"}`}>
@@ -1353,7 +1442,7 @@ function SummarySection({
                         ? "text-amber-500"
                         : "text-emerald-500"
                   }`}>
-                  {avgSkipOverall != null ? `${avgSkipOverall}%` : "—"}
+                  {avgSkipOverall != null ? `${avgSkipOverall}% (${totalSkippedPeople.toLocaleString()})` : "—"}
                 </p>
                 <p className={`text-[10px] mt-1 ${dark ? "text-white/30" : "text-slate-400"}`}>
                   {avgSkipOverall == null
@@ -1363,6 +1452,28 @@ function SummarySection({
                       : avgSkipOverall > 25
                         ? "moderate skip rate"
                         : "great hook retention"}
+                </p>
+              </div>
+
+              {/* Avg Hold Rate */}
+              <div className={`rounded-[20px] border px-4 py-4 ${dark ? "border-white/[0.08] bg-white/[0.03]" : "border-fuchsia-100 bg-white/90"}`}>
+                <p className={`text-[11px] font-semibold uppercase tracking-[0.14em] ${dark ? "text-white/40" : "text-slate-500"}`}>
+                  Avg Hold Rate
+                </p>
+                <p className={`text-[26px] font-bold mt-2 tabular-nums ${avgHoldOverall == null
+                    ? dark ? "text-white/25" : "text-slate-300"
+                    : avgHoldOverall >= 75
+                      ? "text-emerald-500"
+                      : avgHoldOverall >= 50
+                        ? "text-amber-500"
+                        : "text-rose-500"
+                  }`}>
+                  {avgHoldOverall != null ? `${avgHoldOverall}% (${totalHeldPeople.toLocaleString()})` : "—"}
+                </p>
+                <p className={`text-[10px] mt-1 ${dark ? "text-white/30" : "text-slate-400"}`}>
+                  {reelsWithHold.length > 0
+                    ? `held people from ${reelsWithHold.length} reel${reelsWithHold.length !== 1 ? "s" : ""}`
+                    : "no data yet"}
                 </p>
               </div>
 
@@ -1376,10 +1487,10 @@ function SummarySection({
                     <table className="w-full text-sm">
                       <thead>
                         <tr className={dark ? "bg-fuchsia-900/30 border-b border-white/[0.06]" : "bg-fuchsia-50 border-b border-fuchsia-100"}>
-                          {["Date", "Caption", "Reach", "Eng.%", "Avg Watch", "Skip Rate"].map((h) => (
+                          {["Date", "Caption", "Reach", "Views", "Eng.%", "Avg Watch", "Skip Rate", "Hold Rate"].map((h) => (
                             <th
                               key={h}
-                              className={`px-3 py-2.5 text-[10px] font-bold tracking-widest uppercase ${["Reach", "Eng.%", "Avg Watch", "Skip Rate"].includes(h) ? "text-right" : "text-left"
+                              className={`px-3 py-2.5 text-[10px] font-bold tracking-widest uppercase ${["Reach", "Views", "Eng.%", "Avg Watch", "Skip Rate", "Hold Rate"].includes(h) ? "text-right" : "text-left"
                                 } ${dark ? "text-fuchsia-300/60" : "text-fuchsia-600/70"}`}
                             >
                               {h}
@@ -1408,6 +1519,9 @@ function SummarySection({
                             <td className={`px-3 py-2.5 text-right text-[12px] font-semibold ${dark ? "text-white/80" : "text-slate-800"}`}>
                               {post.reach.toLocaleString()}
                             </td>
+                            <td className={`px-3 py-2.5 text-right text-[12px] font-semibold ${post.views > 0 ? dark ? "text-white/80" : "text-slate-800" : dark ? "text-white/20" : "text-slate-300"}`}>
+                              {post.views > 0 ? post.views.toLocaleString() : "—"}
+                            </td>
                             <td className="px-3 py-2.5 text-right">
                               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${parseFloat(post.engagementRate) >= 3
                                   ? dark ? "bg-emerald-500/20 text-emerald-300" : "bg-emerald-100 text-emerald-700"
@@ -1429,7 +1543,17 @@ function SummarySection({
                                     ? "text-amber-500"
                                     : "text-emerald-500"
                               }`}>
-                              {post.skipRate != null ? `${post.skipRate}%` : "—"}
+                              {rateWithPeople(post.skipRate, post.views)}
+                            </td>
+                            <td className={`px-3 py-2.5 text-right text-[12px] font-semibold ${post.holdRate == null
+                                ? dark ? "text-white/20" : "text-slate-300"
+                                : post.holdRate >= 75
+                                  ? "text-emerald-500"
+                                  : post.holdRate >= 50
+                                    ? "text-amber-500"
+                                    : "text-rose-500"
+                              }`}>
+                              {rateWithPeople(post.holdRate, post.views)}
                             </td>
                           </tr>
                         ))}
@@ -1568,6 +1692,7 @@ function PostTable({
     );
   }
 
+  const showReelMetrics = showSaves || posts.some((post) => post.type === "REEL");
   const headers = [
     "Preview",
     "Type",
@@ -1579,8 +1704,9 @@ function PostTable({
     "Shares",
     ...(showSaves ? ["Saves"] : []),
     "Reach",
+    ...(showReelMetrics ? ["Views"] : []),
     "Eng. Rate",
-    ...(showSaves ? ["Avg Watch", "Skip Rate"] : []),
+    ...(showReelMetrics ? ["Avg Watch", "Skip Rate", "Hold Rate"] : []),
   ];
   const rightAlign = new Set([
     "Likes",
@@ -1588,9 +1714,11 @@ function PostTable({
     "Shares",
     "Saves",
     "Reach",
+    "Views",
     "Eng. Rate",
     "Avg Watch",
     "Skip Rate",
+    "Hold Rate",
   ]);
 
   return (
@@ -1740,6 +1868,11 @@ function PostTable({
                   <td className={`px-4 py-3 text-right text-[13px] font-semibold ${dark ? "text-white/80" : "text-slate-800"}`}>
                     {totalReach.toLocaleString()}
                   </td>
+                  {showReelMetrics && (
+                    <td className={`px-4 py-3 text-right text-[13px] font-semibold ${post.type === "REEL" && post.views > 0 ? dark ? "text-white/80" : "text-slate-800" : dark ? "text-white/20" : "text-slate-300"}`}>
+                      {post.type === "REEL" && post.views > 0 ? post.views.toLocaleString() : "—"}
+                    </td>
+                  )}
 
                   <td className="px-4 py-3 text-right">
                     <span
@@ -1760,13 +1893,13 @@ function PostTable({
                     </span>
                   </td>
 
-                  {showSaves && (
+                  {showReelMetrics && (
                     <td className={`px-4 py-3 text-right text-[13px] font-semibold ${dark ? "text-purple-300" : "text-purple-600"}`}>
                       {post.type === "REEL" && post.avgWatchTime != null ? `${post.avgWatchTime}s` : "—"}
                     </td>
                   )}
 
-                  {showSaves && (
+                  {showReelMetrics && (
                     <td className={`px-4 py-3 text-right text-[13px] font-semibold ${post.type === "REEL" && post.skipRate != null
                         ? post.skipRate > 50
                           ? "text-rose-500"
@@ -1775,7 +1908,19 @@ function PostTable({
                             : "text-emerald-500"
                         : dark ? "text-white/20" : "text-slate-300"
                       }`}>
-                      {post.type === "REEL" && post.skipRate != null ? `${post.skipRate}%` : "—"}
+                      {post.type === "REEL" ? rateWithPeople(post.skipRate, post.views) : "—"}
+                    </td>
+                  )}
+                  {showReelMetrics && (
+                    <td className={`px-4 py-3 text-right text-[13px] font-semibold ${post.type === "REEL" && post.holdRate != null
+                        ? post.holdRate >= 75
+                          ? "text-emerald-500"
+                          : post.holdRate >= 50
+                            ? "text-amber-500"
+                            : "text-rose-500"
+                        : dark ? "text-white/20" : "text-slate-300"
+                      }`}>
+                      {post.type === "REEL" ? rateWithPeople(post.holdRate, post.views) : "—"}
                     </td>
                   )}
                 </tr>
@@ -2089,18 +2234,25 @@ export default function SocialMediaReport({
   const fetchReelMetrics = async (
     postId: string,
     token: string
-  ): Promise<{ avgWatchTime: number | null; skipRate: number | null }> => {
-    try {
-      const wRes = await fetch(
-        `${BASE}/${postId}/insights?metric=ig_reels_avg_watch_time,reels_skip_rate&period=lifetime&access_token=${token}`
-      );
-      const wData = await wRes.json();
+  ): Promise<{
+    views: number;
+    avgWatchTime: number | null;
+    skipRate: number | null;
+    holdRate: number | null;
+  }> => {
+    const empty = {
+      views: 0,
+      avgWatchTime: null,
+      skipRate: null,
+      holdRate: null,
+    };
 
-      const watchVal = igVal(wData?.data, "ig_reels_avg_watch_time");
+    const parseMetrics = (data: any[]) => {
+      const watchVal = igVal(data, "ig_reels_avg_watch_time");
       const avgWatchTime = watchVal ? Math.round(watchVal / 1000) : null;
 
       // Meta returns skip rate as a decimal fraction (0.42 = 42%)
-      const skipRaw = igVal(wData?.data, "reels_skip_rate");
+      const skipRaw = igVal(data, "reels_skip_rate");
       const skipRate =
         skipRaw != null && skipRaw > 0
           ? skipRaw <= 1
@@ -2108,9 +2260,49 @@ export default function SocialMediaReport({
             : parseFloat(skipRaw.toFixed(1))
           : null;
 
-      return { avgWatchTime, skipRate };
+      const views = Math.max(
+        igVal(data, "views"),
+        igVal(data, "plays"),
+        igVal(data, "video_views"),
+        igVal(data, "ig_reels_aggregated_all_plays_count")
+      );
+
+      const holdRate =
+        skipRate != null
+          ? parseFloat(Math.max(0, 100 - skipRate).toFixed(1))
+          : null;
+
+      return {
+        views,
+        avgWatchTime,
+        skipRate,
+        holdRate,
+      };
+    };
+
+    try {
+      const wRes = await fetch(
+        `${BASE}/${postId}/insights?metric=ig_reels_avg_watch_time,reels_skip_rate,views&period=lifetime&access_token=${token}`
+      );
+      const wData = await wRes.json();
+      if (wData?.error) throw new Error(wData.error.message || "Reel metric request failed");
+
+      return parseMetrics(wData?.data || []);
     } catch {
-      return { avgWatchTime: null, skipRate: null };
+      try {
+        const [watchRes, viewsRes] = await Promise.all([
+          fetch(
+            `${BASE}/${postId}/insights?metric=ig_reels_avg_watch_time,reels_skip_rate&period=lifetime&access_token=${token}`
+          ),
+          fetch(
+            `${BASE}/${postId}/insights?metric=views&period=lifetime&access_token=${token}`
+          ),
+        ]);
+        const [watchData, viewsData] = await Promise.all([watchRes.json(), viewsRes.json()]);
+        return parseMetrics([...(watchData?.data || []), ...(viewsData?.data || [])]);
+      } catch {
+        return empty;
+      }
     }
   };
 
@@ -2203,6 +2395,18 @@ export default function SocialMediaReport({
               const reach =
                 ins?.data?.find((m: any) => m.name === "post_impressions_unique")
                   ?.values?.[0]?.value ?? 0;
+              let views = 0;
+              if (isReel) {
+                try {
+                  const viewRes = await fetch(
+                    `${BASE}/${post.id}/insights?metric=post_video_views&access_token=${cfg.token}`
+                  );
+                  const viewData = await viewRes.json();
+                  views =
+                    viewData?.data?.find((m: any) => m.name === "post_video_views")
+                      ?.values?.[0]?.value ?? 0;
+                } catch {}
+              }
 
               return {
                 id: post.id,
@@ -2217,6 +2421,8 @@ export default function SocialMediaReport({
                 comments,
                 shares,
                 saves: 0,
+                views,
+                holdRate: null,
                 engagementRate:
                   reach > 0
                     ? (((likes + comments + shares) / reach) * 100).toFixed(2)
@@ -2236,6 +2442,8 @@ export default function SocialMediaReport({
                 comments,
                 shares,
                 saves: 0,
+                views: 0,
+                holdRate: null,
                 engagementRate: "0.00",
               };
             }
@@ -2279,10 +2487,14 @@ export default function SocialMediaReport({
 
               let avgWatchTime: number | null = null;
               let skipRate: number | null = null;
+              let views = 0;
+              let holdRate: number | null = null;
               if (mediaType === "REEL") {
                 const reelMeta = await fetchReelMetrics(post.id, cfg.token);
+                views = reelMeta.views;
                 avgWatchTime = reelMeta.avgWatchTime;
                 skipRate = reelMeta.skipRate;
+                holdRate = reelMeta.holdRate;
               }
 
               return {
@@ -2298,12 +2510,14 @@ export default function SocialMediaReport({
                 comments,
                 shares,
                 saves,
+                views,
                 engagementRate:
                   reach > 0
                     ? (((likes + comments + shares + saves) / reach) * 100).toFixed(2)
                     : "0.00",
                 avgWatchTime,
                 skipRate,
+                holdRate,
               };
             } catch {
               return {
@@ -2319,9 +2533,11 @@ export default function SocialMediaReport({
                 comments: 0,
                 shares: 0,
                 saves: 0,
+                views: 0,
                 engagementRate: "0.00",
                 avgWatchTime: null,
                 skipRate: null,
+                holdRate: null,
               };
             }
           })
@@ -2474,6 +2690,18 @@ export default function SocialMediaReport({
               const reach =
                 ins?.data?.find((m: any) => m.name === "post_impressions_unique")
                   ?.values?.[0]?.value ?? 0;
+              let views = 0;
+              if (isReel) {
+                try {
+                  const viewRes = await fetch(
+                    `${BASE}/${post.id}/insights?metric=post_video_views&access_token=${cfg.token}`
+                  );
+                  const viewData = await viewRes.json();
+                  views =
+                    viewData?.data?.find((m: any) => m.name === "post_video_views")
+                      ?.values?.[0]?.value ?? 0;
+                } catch {}
+              }
               return {
                 id: post.id,
                 message: post.message || "",
@@ -2487,6 +2715,8 @@ export default function SocialMediaReport({
                 comments,
                 shares,
                 saves: 0,
+                views,
+                holdRate: null,
                 engagementRate:
                   reach > 0
                     ? (((likes + comments + shares) / reach) * 100).toFixed(2)
@@ -2506,6 +2736,8 @@ export default function SocialMediaReport({
                 comments,
                 shares,
                 saves: 0,
+                views: 0,
+                holdRate: null,
                 engagementRate: "0.00",
               };
             }
@@ -2553,10 +2785,14 @@ export default function SocialMediaReport({
 
               let avgWatchTime: number | null = null;
               let skipRate: number | null = null;
+              let views = 0;
+              let holdRate: number | null = null;
               if (mediaType === "REEL") {
                 const reelMeta = await fetchReelMetrics(post.id, cfg.token);
+                views = reelMeta.views;
                 avgWatchTime = reelMeta.avgWatchTime;
                 skipRate = reelMeta.skipRate;
+                holdRate = reelMeta.holdRate;
               }
 
               return {
@@ -2572,12 +2808,14 @@ export default function SocialMediaReport({
                 comments,
                 shares,
                 saves,
+                views,
                 engagementRate:
                   reach > 0
                     ? (((likes + comments + shares + saves) / reach) * 100).toFixed(2)
                     : "0.00",
                 avgWatchTime,
                 skipRate,
+                holdRate,
               };
             } catch {
               return {
@@ -2593,9 +2831,11 @@ export default function SocialMediaReport({
                 comments: 0,
                 shares: 0,
                 saves: 0,
+                views: 0,
                 engagementRate: "0.00",
                 avgWatchTime: null,
                 skipRate: null,
+                holdRate: null,
               };
             }
           })
@@ -2862,7 +3102,7 @@ export default function SocialMediaReport({
   const showSaves = activeTab === "IG";
 
   return (
-    <div className="w-full max-w-[1200px] mx-auto flex flex-col gap-6 pb-16">
+    <div className="w-full max-w-[1680px] mx-auto flex flex-col gap-6 pb-16 px-3 sm:px-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <button
           onClick={onBack}

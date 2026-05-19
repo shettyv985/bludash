@@ -21,6 +21,8 @@ interface AdInsight {
   videoAvgWatchTime?: number | null;
   holdRate50?: number;
   completionRate?: number;
+  videoP95?: number;
+  videoP100?: number;
   currency: string;
 }
 
@@ -127,6 +129,16 @@ function fmtMoney(n: number) {
 
 function fmtPct(n: number) {
   return `${n.toFixed(2)}%`;
+}
+
+function peopleFromRate(views: number, rate?: number | null): number {
+  if (!views || rate == null) return 0;
+  return Math.round((views * rate) / 100);
+}
+
+function pctWithPeople(rate: number | null | undefined, views: number): string {
+  if (rate == null) return "—";
+  return `${fmtPct(rate)} (${fmt(peopleFromRate(views, rate))})`;
 }
 
 function getCTRAccent(ctr: number, dark: boolean) {
@@ -551,10 +563,10 @@ export default function AdModal({ ad, onClose, dark, token }: Props) {
               {ad.isVideo && (
                 <StatBox
                   label="Skip Rate"
-                  value={fmtPct(ins.skipRate || 0)}
+                  value={pctWithPeople(ins.skipRate || 0, ins.videoViews)}
                   dark={dark}
                   accent={getSkipAccent(ins.skipRate || 0, dark)}
-                  sub="Derived"
+                  sub="Skipped people"
                 />
               )}
               {ad.isVideo && ins.videoAvgWatchTime != null && (
@@ -568,9 +580,10 @@ export default function AdModal({ ad, onClose, dark, token }: Props) {
               {ad.isVideo && (ins.holdRate50 || 0) > 0 && (
                 <StatBox
                   label="50% Hold"
-                  value={fmtPct(ins.holdRate50 || 0)}
+                  value={pctWithPeople(ins.holdRate50 || 0, ins.videoViews)}
                   dark={dark}
                   accent={getHookAccent(ins.holdRate50 || 0, dark)}
+                  sub="Held people"
                 />
               )}
             </div>

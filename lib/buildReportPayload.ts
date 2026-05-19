@@ -37,6 +37,11 @@ function pct(a: number, b: number) {
   return +((a / b) * 100).toFixed(2);
 }
 
+function peopleFromRate(views: number, rate?: number | null): number {
+  if (!views || rate == null) return 0;
+  return Math.round((views * rate) / 100);
+}
+
 function round(n: number, d = 2) {
   return +n.toFixed(d);
 }
@@ -73,8 +78,10 @@ export interface AnalyzedAd {
   videoViews: number;
   hookRate: number;
   skipRate: number;
+  skipCount: number;
   avgWatchTime: number | null;
   holdRate50: number;
+  holdCount50: number;
   completionRate: number;
   thruPlays: number;
   landingPageViews: number;
@@ -126,6 +133,8 @@ export interface ReportPayload {
     totalComments: number;
     totalShares: number;
     totalVideoViews: number;
+    totalVideoSkippedPeople: number;
+    totalVideoHeldPeople: number;
     totalLandingPageViews: number;
     totalPostEngagements: number;
     overallCTR: number;
@@ -236,7 +245,6 @@ export function buildReportPayload(
     const ins = ad.insights;
     const engagementRate = pct(ins.likes + ins.comments + ins.shares, ins.reach);
     const videoViewRate  = ad.isVideo ? pct(ins.videoViews, ins.impressions) : 0;
-
     return {
       id: ad.id,
       name: ad.name,
@@ -263,8 +271,10 @@ export function buildReportPayload(
       videoViews: ins.videoViews,
       hookRate: round(ins.hookRate),
       skipRate: round(ins.skipRate),
+      skipCount: peopleFromRate(ins.videoViews, ins.skipRate),
       avgWatchTime: ins.videoAvgWatchTime != null ? round(ins.videoAvgWatchTime, 1) : null,
       holdRate50: round(ins.holdRate50),
+      holdCount50: peopleFromRate(ins.videoViews, ins.holdRate50),
       completionRate: round(ins.completionRate),
       thruPlays: ins.thruPlays,
       landingPageViews: ins.landingPageViews,
@@ -464,6 +474,8 @@ export function buildReportPayload(
   const avgCPL = round(adsWithLeads.reduce((s, a) => s + a.cpl, 0) / (adsWithLeads.length || 1));
   const videoImpressions = videoAds.reduce((s, a) => s + a.impressions, 0);
   const videoViews = videoAds.reduce((s, a) => s + a.videoViews, 0);
+  const videoSkippedPeople = videoAds.reduce((s, a) => s + a.skipCount, 0);
+  const videoHeldPeople = videoAds.reduce((s, a) => s + a.holdCount50, 0);
   const avgVideoHookRate = round(pct(videoViews, videoImpressions));
   const avgVideoSkipRate = videoImpressions > 0 ? round(Math.max(0, 100 - avgVideoHookRate)) : 0;
   const videoAdsWithWatch = videoAds.filter((a) => a.avgWatchTime != null);
@@ -500,6 +512,8 @@ export function buildReportPayload(
       totalComments,
       totalShares,
       totalVideoViews,
+      totalVideoSkippedPeople: videoSkippedPeople,
+      totalVideoHeldPeople: videoHeldPeople,
       totalLandingPageViews: totalLPViews,
       totalPostEngagements: totalEngagements,
       overallCTR,

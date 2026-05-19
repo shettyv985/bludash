@@ -58,6 +58,16 @@ function fmtPct(n: number) {
   return `${n.toFixed(2)}%`;
 }
 
+function peopleFromRate(views: number, rate?: number | null): number {
+  if (!views || rate == null) return 0;
+  return Math.round((views * rate) / 100);
+}
+
+function pctWithPeople(rate: number | null | undefined, views: number): string {
+  if (rate == null) return "-";
+  return `${fmtPct(rate)} (${fmt(peopleFromRate(views, rate))})`;
+}
+
 function getCTRHighlight(ctr: number): "good" | "warn" | "bad" {
   return ctr >= 1.5 ? "good" : ctr >= 0.8 ? "warn" : "bad";
 }
@@ -693,6 +703,19 @@ function PerformanceReelsPanel({
       : null;
   const avgHookRate = totalImpressions > 0 ? (totalVideoViews / totalImpressions) * 100 : 0;
   const avgSkipRate = totalImpressions > 0 ? Math.max(0, 100 - avgHookRate) : 0;
+  const totalSkippedPeople = reels.reduce(
+    (s, ad) => s + peopleFromRate(ad.insights.videoViews, ad.insights.skipRate),
+    0
+  );
+  const holdRows = reels.filter((ad) => ad.insights.holdRate50 > 0);
+  const totalHeldPeople = reels.reduce(
+    (s, ad) => s + peopleFromRate(ad.insights.videoViews, ad.insights.holdRate50),
+    0
+  );
+  const avgHoldRate =
+    holdRows.length > 0
+      ? holdRows.reduce((s, ad) => s + ad.insights.holdRate50, 0) / holdRows.length
+      : 0;
   const reelCTR = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
   const reelCPM = totalImpressions > 0 ? (totalSpend / totalImpressions) * 1000 : 0;
   const reelCPL = totalLeads > 0 ? totalSpend / totalLeads : 0;
@@ -701,11 +724,11 @@ function PerformanceReelsPanel({
     "Creative",
     "Spend",
     "Impr.",
-    "3s Views",
+    "Views",
     "Hook",
     "Skip",
     "Avg Watch",
-    "50% Hold",
+    "Hold",
     "CTR",
     "CPM",
     "Leads",
@@ -734,11 +757,17 @@ function PerformanceReelsPanel({
         ? "border-violet-300/10 bg-[linear-gradient(145deg,rgba(36,24,62,0.74),rgba(11,14,28,0.94))]"
         : "border-violet-100 bg-[linear-gradient(145deg,#f5f3ff,#ffffff)]"
       }`}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8 gap-3">
           <ReelMetricCard
             label="Video Spend"
             value={fmtMoney(totalSpend)}
             sub={`Across ${reels.length} creatives`}
+            dark={dark}
+          />
+          <ReelMetricCard
+            label="Views"
+            value={totalVideoViews > 0 ? fmt(totalVideoViews) : "-"}
+            sub="Video views from reel creatives"
             dark={dark}
           />
           <ReelMetricCard
@@ -750,9 +779,16 @@ function PerformanceReelsPanel({
           />
           <ReelMetricCard
             label="Skip Rate"
-            value={fmtPct(avgSkipRate)}
-            sub="Derived from non-hooked impressions"
+            value={`${fmtPct(avgSkipRate)} (${fmt(totalSkippedPeople)})`}
+            sub="Skipped people from video views"
             tone={getSkipHighlight(avgSkipRate)}
+            dark={dark}
+          />
+          <ReelMetricCard
+            label="Hold Rate"
+            value={avgHoldRate > 0 ? `${fmtPct(avgHoldRate)} (${fmt(totalHeldPeople)})` : "-"}
+            sub={holdRows.length > 0 ? "Held people from video views" : "No hold-rate data yet"}
+            tone={avgHoldRate > 0 ? getHoldHighlight(avgHoldRate) : undefined}
             dark={dark}
           />
           <ReelMetricCard
@@ -854,14 +890,14 @@ function PerformanceReelsPanel({
                         <MetricCell value={fmtPct(ins.hookRate)} highlight={getHookHighlight(ins.hookRate)} dark={dark} />
                       </td>
                       <td className="px-3 py-2.5 text-right whitespace-nowrap">
-                        <MetricCell value={fmtPct(ins.skipRate)} highlight={getSkipHighlight(ins.skipRate)} dark={dark} />
+                        <MetricCell value={pctWithPeople(ins.skipRate, ins.videoViews)} highlight={getSkipHighlight(ins.skipRate)} dark={dark} />
                       </td>
                       <td className="px-3 py-2.5 text-right whitespace-nowrap">
                         <MetricCell value={fmtSeconds(ins.videoAvgWatchTime)} dark={dark} />
                       </td>
                       <td className="px-3 py-2.5 text-right whitespace-nowrap">
                         <MetricCell
-                          value={ins.holdRate50 > 0 ? fmtPct(ins.holdRate50) : "-"}
+                          value={ins.holdRate50 > 0 ? pctWithPeople(ins.holdRate50, ins.videoViews) : "-"}
                           highlight={ins.holdRate50 > 0 ? getHoldHighlight(ins.holdRate50) : null}
                           dark={dark}
                         />
@@ -901,7 +937,7 @@ function exportCSV(ads: Ad[], client: string, from: string, to: string) {
     "Spend", "Reach", "Impressions", "Clicks", "CTR", "CPM", "CPC",
     "Leads", "CPL", "Landing Page Views", "Post Engagements",
     "Likes", "Comments", "Shares", "Video Views", "Hook Rate", "Skip Rate",
-    "Avg Watch Time", "50% Hold Rate", "Completion Rate",
+    "Skip People", "Avg Watch Time", "50% Hold Rate", "Hold People", "Completion Rate",
   ];
 
   const escape = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`;
@@ -928,8 +964,10 @@ function exportCSV(ads: Ad[], client: string, from: string, to: string) {
     ad.insights.videoViews,
     ad.insights.hookRate.toFixed(2),
     ad.insights.skipRate.toFixed(2),
+    peopleFromRate(ad.insights.videoViews, ad.insights.skipRate),
     ad.insights.videoAvgWatchTime != null ? ad.insights.videoAvgWatchTime.toFixed(1) : "",
     ad.insights.holdRate50.toFixed(2),
+    peopleFromRate(ad.insights.videoViews, ad.insights.holdRate50),
     ad.insights.completionRate.toFixed(2),
   ]);
 
@@ -951,6 +989,8 @@ async function exportPDF(
     totalReach: number;
     totalImpressions: number;
     totalClicks: number;
+    totalVideoViews: number;
+    avgVideoHoldRate50: number;
     overallCTR: number;
     overallCPM: number;
     overallCPC: number;
@@ -991,6 +1031,8 @@ async function exportPDF(
     { label: "TOTAL REACH", value: fmt(summary.totalReach) },
     { label: "IMPRESSIONS", value: fmt(summary.totalImpressions) },
     { label: "CLICKS", value: fmt(summary.totalClicks) },
+    { label: "VIDEO VIEWS", value: fmt(summary.totalVideoViews) },
+    { label: "HOLD RATE", value: summary.avgVideoHoldRate50 > 0 ? fmtPct(summary.avgVideoHoldRate50) : "â€”" },
     { label: "CTR", value: fmtPct(summary.overallCTR) },
     { label: "CPM", value: fmtMoney(summary.overallCPM) },
     { label: "CPC", value: summary.overallCPC > 0 ? fmtMoney(summary.overallCPC) : "—" },
@@ -1033,7 +1075,7 @@ async function exportPDF(
       "Ad Name", "Campaign", "Ad Set",
       "Spend", "Reach", "Impressions", "Clicks", "CTR", "CPM", "CPC",
       "Leads", "CPL", "LP Views", "Engagements",
-      "Likes", "Comments", "Shares", "Vid Views", "Hook", "Skip", "Avg Watch",
+      "Likes", "Comments", "Shares", "Vid Views", "Hook", "Skip", "Skip #", "Avg Watch", "Hold", "Hold #",
     ]],
     body: ads.map((ad) => [
       ad.name,
@@ -1056,7 +1098,10 @@ async function exportPDF(
       fmt(ad.insights.videoViews),
       fmtPct(ad.insights.hookRate),
       fmtPct(ad.insights.skipRate),
+      fmt(peopleFromRate(ad.insights.videoViews, ad.insights.skipRate)),
       fmtSeconds(ad.insights.videoAvgWatchTime),
+      ad.insights.holdRate50 > 0 ? fmtPct(ad.insights.holdRate50) : "â€”",
+      ad.insights.holdRate50 > 0 ? fmt(peopleFromRate(ad.insights.videoViews, ad.insights.holdRate50)) : "â€”",
     ]),
     styles: { fontSize: 5.5, cellPadding: 1.5, overflow: "linebreak" },
     headStyles: { fillColor: [29, 78, 216], textColor: [255, 255, 255], fontStyle: "bold" },
@@ -1126,6 +1171,7 @@ type PerformanceSummary = {
   totalComments: number;
   totalShares: number;
   totalVideoViews: number;
+  avgVideoHoldRate50: number;
   totalLeads: number;
   totalLandingPageViews: number;
   totalPostEngagements: number;
@@ -1156,6 +1202,11 @@ function buildPerformanceSummary(ads: Ad[], accountInsight: AdInsight | null = n
   const summedComments = ads.reduce((s, a) => s + a.insights.comments, 0);
   const summedShares = ads.reduce((s, a) => s + a.insights.shares, 0);
   const summedVideoViews = ads.reduce((s, a) => s + a.insights.videoViews, 0);
+  const holdRows = ads.filter((a) => a.insights.holdRate50 > 0);
+  const avgVideoHoldRate50 =
+    holdRows.length > 0
+      ? holdRows.reduce((s, a) => s + a.insights.holdRate50, 0) / holdRows.length
+      : 0;
   const summedLeads = ads.reduce((s, a) => s + a.insights.leads, 0);
   const summedLandingPageViews = ads.reduce((s, a) => s + a.insights.landingPageViews, 0);
   const summedPostEngagements = ads.reduce((s, a) => s + a.insights.postEngagements, 0);
@@ -1185,6 +1236,7 @@ function buildPerformanceSummary(ads: Ad[], accountInsight: AdInsight | null = n
     totalComments,
     totalShares,
     totalVideoViews,
+    avgVideoHoldRate50,
     totalLeads,
     totalLandingPageViews,
     totalPostEngagements,
@@ -1346,6 +1398,12 @@ const totalClicks = summary.totalClicks;
 const totalLeads = summary.totalLeads;
 const totalLandingPageViews = summary.totalLandingPageViews;
 const totalPostEngagements = summary.totalPostEngagements;
+const totalVideoViews = summary.totalVideoViews;
+const avgVideoHoldRate50 = summary.avgVideoHoldRate50;
+const totalHeldVideoPeople = allAds.reduce(
+  (sum, ad) => sum + peopleFromRate(ad.insights.videoViews, ad.insights.holdRate50),
+  0
+);
 const overallCTR = summary.overallCTR;
 const overallCPM = summary.overallCPM;
 const overallCPC = summary.overallCPC;
@@ -1467,7 +1525,7 @@ const performanceReels = allAds.filter((ad) => ad.isVideo || ad.insights.videoVi
   }
 
   return (
-    <div className="w-full max-w-[1300px] mx-auto flex flex-col gap-6 pb-16">
+    <div className="w-full max-w-[1680px] mx-auto flex flex-col gap-6 pb-16 px-3 sm:px-4">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <button
@@ -1689,7 +1747,7 @@ const performanceReels = allAds.filter((ad) => ad.isVideo || ad.insights.videoVi
   />
 </div>
 
-<div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+<div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
   <SummaryCard
     label="Total Leads"
     value={totalLeads > 0 ? fmt(totalLeads) : "—"}
@@ -1761,6 +1819,55 @@ const performanceReels = allAds.filter((ad) => ad.isVideo || ad.insights.videoVi
         <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
         <polyline points="15 3 21 3 21 9" />
         <line x1="10" y1="14" x2="21" y2="3" />
+      </svg>
+    }
+  />
+  <SummaryCard
+    label="Video Views"
+    value={totalVideoViews > 0 ? fmt(totalVideoViews) : "â€”"}
+    sub={
+      previousMonthLoading
+        ? "Loading previous-month comparison..."
+        : comparisonSub(
+            `${comparisonRange.from} to ${comparisonRange.to}`,
+            totalVideoViews,
+            comparisonSummary.totalVideoViews,
+            (value) => fmt(value)
+          )
+    }
+    accent={dark ? "text-purple-400" : "text-purple-600"}
+    dark={dark}
+    icon={
+      <svg {...iconProps} className={dark ? "text-purple-400" : "text-purple-600"}>
+        <polygon points="5 3 19 12 5 21 5 3" />
+      </svg>
+    }
+  />
+  <SummaryCard
+    label="Hold Rate"
+    value={avgVideoHoldRate50 > 0 ? `${fmtPct(avgVideoHoldRate50)} (${fmt(totalHeldVideoPeople)})` : "â€”"}
+    sub={
+      previousMonthLoading
+        ? "Loading previous-month comparison..."
+        : comparisonSub(
+            `${comparisonRange.from} to ${comparisonRange.to}`,
+            avgVideoHoldRate50,
+            comparisonSummary.avgVideoHoldRate50,
+            (value) => fmtPct(value)
+          )
+    }
+    accent={
+      avgVideoHoldRate50 >= 35
+        ? dark ? "text-emerald-400" : "text-emerald-600"
+        : avgVideoHoldRate50 >= 20
+          ? dark ? "text-yellow-400" : "text-yellow-600"
+          : dark ? "text-red-400" : "text-red-600"
+    }
+    dark={dark}
+    icon={
+      <svg {...iconProps} className={iconCls}>
+        <circle cx="12" cy="12" r="10" />
+        <path d="M8 12h8" />
       </svg>
     }
   />

@@ -33,6 +33,8 @@ function buildHtmlPayload(payload: SocialReportPayload) {
       igBestWatchTime: payload.rankings.igBestWatchTime,
       igWorstSkipRate: payload.rankings.igWorstSkipRate,
       igBestSkipRate: payload.rankings.igBestSkipRate,
+      igTopReelViews: payload.rankings.igTopReelViews,
+      igBestHoldRate: payload.rankings.igBestHoldRate,
       boostedPosts: payload.rankings.boostedPosts.slice(0, 10),
       highSpendLowEngagement: payload.rankings.highSpendLowEngagement,
     },
@@ -158,6 +160,7 @@ Posts: ${hp.summary.fbPostCount} | Reach: ${hp.summary.fbTotalReach.toLocaleStri
 Below the grid: a "What this means" insight card explaining FB's numbers in plain language with specific diagnosis.
 
 INSTAGRAM (purple header, purple accent cards):
+Must include prominent Reel summary cards for Reel Views ${(hp.summary.igReelViews ?? 0).toLocaleString()}, Avg Hold Rate ${hp.summary.avgIgReelHoldRate ?? '—'}% (${(hp.summary.igReelHeldPeople ?? 0).toLocaleString()} people), and Avg Skip Rate ${hp.summary.avgIgReelSkipRate ?? '—'}% (${(hp.summary.igReelSkippedPeople ?? 0).toLocaleString()} people), in addition to the existing Instagram metrics.
 Posts: ${hp.summary.igPostCount} | Total Reach: ${hp.summary.igTotalReach.toLocaleString()} (organic ${hp.summary.igOrganicReach.toLocaleString()} / paid ${hp.summary.igPaidReach.toLocaleString()}) | Total Likes: ${hp.summary.igTotalLikes.toLocaleString()} (organic ${hp.summary.igOrganicLikes} / paid ${hp.summary.igPaidLikes.toLocaleString()}) | Comments: ${hp.summary.igTotalComments} | Shares: ${hp.summary.igTotalShares} | Saves: ${hp.summary.igOrganicSaves} | Follows: ${hp.summary.igFollows} | Unfollows: ${hp.summary.igUnfollows} | Net Followers: +${hp.summary.igNetFollows} | Profile Views: ${hp.summary.igProfileViews.toLocaleString()} | Boosted Posts: ${hp.summary.igBoostedPostCount} | Ad Spend: ₹${hp.summary.igTotalAdSpend.toFixed(2)} | Avg ER: ${hp.summary.avgIgEngagementRate}% | Reels: ${hp.summary.igReelCount} | Carousels: ${hp.summary.igCarouselCount} | Images: ${hp.summary.igImageCount} | Avg Reel Watch: ${hp.summary.avgIgReelWatchTime ?? '—'}s | Avg Skip Rate: ${hp.summary.avgIgReelSkipRate ?? '—'}% (color by threshold)
 Below: "What this means" insight card with specific IG diagnosis.
 
@@ -166,7 +169,7 @@ Only if reportData.reelHookAnalysis.available === true. Otherwise muted card.
 
 When available:
 - Section header with large hook quality badge (Excellent=emerald, Good=blue, Moderate=amber, Poor=red). The badge should be prominent — this is a KEY metric.
-- Row of 4 stat cards: Avg Skip Rate (large, colored by threshold) | Avg Watch Time | Hook Quality Rating | Number of Reels Analyzed
+- Row of 5 stat cards: Reel Views | Avg Hold Rate with held people count | Avg Skip Rate with skipped people count | Avg Watch Time | Number of Reels Analyzed
 - VISUAL SKIP RATE SCALE BAR:
   A horizontal bar 0–100%. Marker at 25% labeled "✓ Good" in emerald. Marker at 50% labeled "⚠ Ok" in amber. A pulsing dot/pointer at the actual avg skip rate position with a label. Fill the bar with a gradient (emerald→amber→red).
 - 2-col best/worst hook cards:
@@ -181,7 +184,7 @@ When available:
 - Hook Improvement Plan in amber-tinted card:
   "3-Step Hook Fix Plan" header. Render reportData.reelHookAnalysis.hookImprovementPlan parsed into 3 numbered steps. Each step should have a title, explanation, and expected impact.
 - Per-reel breakdown table:
-  Columns: # | Caption (50 chars) | Reach | Eng Rate (colored pill) | Avg Watch (purple) | Skip Rate (colored pill) | Verdict
+  Columns: # | Caption (50 chars) | Views | Reach | Eng Rate (colored pill) | Avg Watch (purple) | Skip Rate (colored pill with people count) | Hold Rate (colored pill with people count) | Verdict
   Sorted by skip rate ascending (best hooks first — lowest skip = best hook retention)
   Verdict column: <74% skip = "Strong Hook" emerald | 74–80% = "Weak Hook" amber | >80% = "Kill This Format" red
   Include ALL reels from hp.rankings.igTopReels and hp.rankings.igWorstSkipRate (deduplicated)
@@ -213,7 +216,7 @@ WORST PERFORMER CARD (2px red border, box-shadow: 0 0 40px rgba(239,68,68,0.2)):
 
 CONTENT RANKINGS TABLE:
 Search box above. Sortable columns via vanilla JS click-to-sort.
-Columns: Rank | Platform badge | Type badge | Caption (60 chars) | Eng Rate (colored pill) | Reach | Likes | Skip Rate (colored or —) | Avg Watch | Boosted (amber badge or —) | Diagnosis
+Columns: Rank | Platform badge | Type badge | Caption (60 chars) | Eng Rate (colored pill) | Reach | Views | Likes | Skip Rate (colored with people count or —) | Hold Rate (with people count) | Avg Watch | Boosted (amber badge or —) | Diagnosis
 Render ALL entries from reportData.contentDeepDive.contentRankings.
 Diagnosis column: render the 2-sentence diagnosis from Manus — DO NOT TRUNCATE.
 Sticky header. Zebra striping. Hover highlight.
@@ -222,7 +225,7 @@ FORMAT ANALYSIS — 2-col card (side by side):
 Left (FB): render reportData.contentDeepDive.formatAnalysis.fbBestFormat in FULL with a "Recommended Weekly Mix" section showing specific counts.
 Right (IG): render reportData.contentDeepDive.formatAnalysis.igBestFormat in FULL with recommended weekly mix.
 Below: 2-col — Reel Analysis card (purple) and Carousel Analysis card (blue).
-  Reel card: render reportData.contentDeepDive.formatAnalysis.reelAnalysis in FULL. Include avg watch time ${hp.summary.avgIgReelWatchTime}s and avg skip rate ${hp.summary.avgIgReelSkipRate}%.
+  Reel card: render reportData.contentDeepDive.formatAnalysis.reelAnalysis in FULL. Include reel views ${(hp.summary.igReelViews ?? 0).toLocaleString()}, avg hold rate ${hp.summary.avgIgReelHoldRate ?? '—'}% (${(hp.summary.igReelHeldPeople ?? 0).toLocaleString()} people), avg watch time ${hp.summary.avgIgReelWatchTime}s and avg skip rate ${hp.summary.avgIgReelSkipRate}% (${(hp.summary.igReelSkippedPeople ?? 0).toLocaleString()} people).
   Carousel card: render reportData.contentDeepDive.formatAnalysis.carouselAnalysis in FULL.
 Below: recommendations from reportData.contentDeepDive.formatAnalysis.recommendations as 3 action cards.
 
@@ -359,7 +362,7 @@ Search input + platform filter dropdown (All/FB/IG) + type filter (All/IMAGE/REE
 Sortable via vanilla JS (click column header to sort asc/desc, arrow indicator).
 Sticky header.
 
-COLUMNS: # | Platform | Type | Date | Caption (50 chars, show tooltip with full caption on hover) | Likes | Comments | Shares | Saves | Reach | Eng% | Skip Rate | Avg Watch | Boosted | Spend
+COLUMNS: # | Platform | Type | Date | Caption (50 chars, show tooltip with full caption on hover) | Likes | Comments | Shares | Saves | Reach | Views | Eng% | Skip Rate | Hold Rate | Avg Watch | Boosted | Spend
 
 Data: render ALL posts from BOTH hp.rankings.fbTopEngagement, hp.rankings.fbTopReach, hp.rankings.fbWorstEngagement, hp.rankings.igTopEngagement, hp.rankings.igTopReach, hp.rankings.igWorstEngagement, hp.rankings.igTopReels, hp.rankings.boostedPosts — deduplicated by id, sorted by engagementRate desc.
 
@@ -368,6 +371,7 @@ Styling:
   Type: REEL=purple pill, CAROUSEL=blue pill, IMAGE=slate pill
   Eng%: ≥3% emerald pill, ≥1% amber pill, <1% red pill
   Skip Rate: ≤25% emerald, ≤50% amber, >50% red pill, "—" for non-reels
+  Hold Rate: ≥75% emerald, ≥50% amber, <50% red pill, "—" for non-reels
   Avg Watch: purple text for reels, "—" for others
   Boosted: amber "BOOSTED ₹X" badge or muted "—"
 Zebra rows. Hover highlight.

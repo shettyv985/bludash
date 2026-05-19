@@ -59,7 +59,7 @@ Every insight must:
 - Explain the PSYCHOLOGICAL or STRATEGIC reason WHY something worked or failed
 - Give ACTIONABLE next steps with expected outcomes
 - Compare against benchmarks (Engagement rate good ≥3%, ok ≥1%)
-- For Reels: reference skip rate (good ≤25%, ok ≤50%, bad >50%) AND avg watch time
+- For Reels: reference views, hold rate with held people count, skip rate with skipped people count (good ≤25%, ok ≤50%, bad >50%), AND avg watch time
 - For MoM comparisons: use the comparison block to state exact % changes and call out if a trend is improving or declining
 
 DEPTH MANDATE:
@@ -78,6 +78,7 @@ REEL HOOK QUALITY GUIDE (use in your analysis):
 - Avg watch time <5s = Critical failure regardless of skip rate
 - Avg watch time 10–20s = Acceptable for short-form
 - Avg watch time >20s = Strong content depth
+- Hold rate = 100 - skip rate when available; higher hold is better
 
 Return this exact JSON schema (all fields required, do not add extra fields):
 {
@@ -123,16 +124,22 @@ Return this exact JSON schema (all fields required, do not add extra fields):
     "available": <true if any reels have skipRate data, false otherwise>,
     "avgSkipRate": "<e.g. '42%' or 'No data'>",
     "avgWatchTime": "<e.g. '11s' or 'No data'>",
+    "avgHoldRate": "<e.g. '58%' or 'No data'>",
+    "totalViews": "<number or 'No data'>",
     "hookQualityRating": "<Excellent|Good|Moderate|Poor|No Data>",
     "bestHook": {
       "postCaption": "<caption>",
+      "views": "<number>",
       "skipRate": "<X%>",
+      "holdRate": "<X%>",
       "watchTime": "<Xs>",
       "whyItWorks": "<What specifically in the first 3 seconds makes viewers stay>"
     },
     "worstHook": {
       "postCaption": "<caption>",
+      "views": "<number>",
       "skipRate": "<X%>",
+      "holdRate": "<X%>",
       "watchTime": "<Xs>",
       "whyItFails": "<What is causing the skip in first 3 seconds>"
     },
@@ -142,8 +149,8 @@ Return this exact JSON schema (all fields required, do not add extra fields):
     {
       "point": "<Short title>",
       "platform": "<FB|IG|Both>",
-      "whyItWorks": "<Deep explanation. Is it the format (Reel vs image)? The emotional hook? The timing? The caption style? The visual? For Reels: reference skip rate and watch time data. Reference exact engagement rates and reach.>",
-      "evidence": "<Exact metrics: Engagement rate X%, Reach X, Likes X, Saves X, Watch time Xs, Skip rate X%>",
+      "whyItWorks": "<Deep explanation. Is it the format (Reel vs image)? The emotional hook? The timing? The caption style? The visual? For Reels: reference views, hold rate with held people count, skip rate with skipped people count, and watch time data. Reference exact engagement rates and reach.>",
+      "evidence": "<Exact metrics: Engagement rate X%, Reach X, Views X, Likes X, Saves X, Watch time Xs, Skip rate X% (Y people), Hold rate X% (Y people)>",
       "recommendation": "<Exact scaling action — e.g. 'Post 3 Reels per week with similar POV-style hook, expected to increase avg engagement rate from 2.1% to 4%'>",
       "scalingPotential": "<High|Medium|Low with reason>"
     }
@@ -162,7 +169,7 @@ Return this exact JSON schema (all fields required, do not add extra fields):
       "point": "<Short title>",
       "platform": "<FB|IG|Both>",
       "whyItFails": "<Deep diagnosis. Is it wrong format for algorithm? Weak hook (reference skip rate)? Caption too long? Wrong posting time? Poor visual quality? Audience mismatch? Reference exact metrics.>",
-      "evidence": "<Exact metrics showing failure, including skip rate and watch time for Reels>",
+      "evidence": "<Exact metrics showing failure, including views, hold rate with held people count, skip rate with skipped people count, and watch time for Reels>",
       "recommendation": "<Exact fix>",
       "verdict": "<Stop This Format|Fix The Hook|Fix The Caption|Fix The Visual|Wrong Platform>"
     }
@@ -195,8 +202,8 @@ Return this exact JSON schema (all fields required, do not add extra fields):
       "platform": "<FB|IG>",
       "postCaption": "<first 80 chars of caption>",
       "postType": "<REEL|IMAGE|CAROUSEL>",
-      "whyItWorks": "<Detailed breakdown: What is the hook doing? What emotion does it trigger? Why does this format win on this platform? For Reels: what do the skip rate and watch time tell us? What makes it shareable? Minimum 4 sentences.>",
-      "keyMetrics": "<Engagement rate: X%, Reach: X, Likes: X, Saves: X, Watch time: Xs, Skip rate: X%>",
+      "whyItWorks": "<Detailed breakdown: What is the hook doing? What emotion does it trigger? Why does this format win on this platform? For Reels: what do the views, hold rate, skip rate, and watch time tell us? What makes it shareable? Minimum 4 sentences.>",
+      "keyMetrics": "<Engagement rate: X%, Reach: X, Views: X, Likes: X, Saves: X, Watch time: Xs, Skip rate: X% (Y people), Hold rate: X% (Y people)>",
       "whatToReplicate": "<Specific content brief for next post based on what works here>"
     },
     "worstPerformer": {
@@ -204,7 +211,7 @@ Return this exact JSON schema (all fields required, do not add extra fields):
       "postCaption": "<first 80 chars>",
       "postType": "<REEL|IMAGE|CAROUSEL>",
       "whyItFails": "<Detailed content autopsy. For Reels: lead with skip rate diagnosis. What is failing? Hook? Visual? Caption? Format for platform? Algorithm signals? Minimum 4 sentences.>",
-      "keyMetrics": "<Engagement rate: X%, Reach: X, Likes: X, Skip rate: X%, Watch time: Xs>",
+      "keyMetrics": "<Engagement rate: X%, Reach: X, Views: X, Likes: X, Skip rate: X% (Y people), Hold rate: X% (Y people), Watch time: Xs>",
       "whatToChange": "<Specific content brief for replacement>"
     },
     "contentRankings": [
@@ -217,7 +224,9 @@ Return this exact JSON schema (all fields required, do not add extra fields):
         "reach": <number>,
         "likes": <number>,
         "isBoosted": <boolean>,
+        "views": <number>,
         "skipRate": "<X% or —>",
+        "holdRate": "<X% or —>",
         "avgWatchTime": "<Xs or —>",
         "diagnosis": "<2 sentences on why this ranks here>"
       }
@@ -225,7 +234,7 @@ Return this exact JSON schema (all fields required, do not add extra fields):
     "formatAnalysis": {
       "fbBestFormat": "<Which format (image/reel/video) performs best on FB for this account and why>",
       "igBestFormat": "<Which format (reel/carousel/image) performs best on IG for this account and why>",
-      "reelAnalysis": "<Deep analysis of Reel performance — hook quality based on skip rate data, watch time patterns, engagement trends. Reference specific numbers.>",
+      "reelAnalysis": "<Deep analysis of Reel performance — views, hold rate with held people count, hook quality based on skip rate/skipped people data, watch time patterns, engagement trends. Reference specific numbers.>",
       "carouselAnalysis": "<Analysis of carousel performance — save rate signals, engagement vs reels>",
       "recommendations": ["<Specific format recommendation>", "<Specific format recommendation>", "<Specific format recommendation>"]
     }

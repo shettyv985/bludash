@@ -32,7 +32,7 @@ For creative analysis specifically:
 - Explain WHY a creative worked: Was it the hook? The emotion? The offer? The format? The CTA?
 - Explain WHY a creative failed: Weak hook? Wrong audience? Poor visual hierarchy? No urgency?
 - Reference the specific CTR, video view rate, engagement rate as evidence
-- For Reel/video creatives, reference hook rate, derived skip rate, average watch time, 50% hold rate, CTR, CPM, CPL, and leads wherever available
+- For Reel/video creatives, reference views, hook rate, derived skip rate with skipped people count, average watch time, 50% hold rate with held people count, CTR, CPM, CPL, and leads wherever available
 - Suggest EXACTLY what to change (specific copy direction, visual style, CTA wording)
 
 Return this exact JSON schema (all fields required, no nulls):
@@ -78,13 +78,13 @@ Return this exact JSON schema (all fields required, no nulls):
     "topPerformer": {
       "adName": "<exact ad name>",
       "whyItWorks": "<Detailed breakdown: What is the hook doing? What emotion does it trigger? Why does the audience respond? What is the creative format advantage? What makes the CTA compelling? Minimum 4 sentences.>",
-      "keyMetrics": "<CTR: X%, CPL: ₹X, Leads: X, Video view rate: X%, Engagement rate: X%>",
+      "keyMetrics": "<CTR: X%, CPL: ₹X, Leads: X, Views: X, Video view rate: X%, Skip rate: X% (Y people), Hold rate: X% (Y people), Engagement rate: X%>",
       "whatToReplicate": "<Specific creative direction for new ads based on what works here — e.g. 'POV-style first-person perspective, emotional wedding moment in first 3 seconds, urgency-driven CTA'>"
     },
     "worstPerformer": {
       "adName": "<exact ad name>",
       "whyItFails": "<Detailed creative autopsy: What is the hook doing wrong? What is the audience experiencing in the first 3 seconds? Why are they scrolling past? What emotional or logical trigger is missing? Minimum 4 sentences.>",
-      "keyMetrics": "<CTR: X%, CPL: ₹X, Spend wasted: ₹X, Video view rate: X%>",
+      "keyMetrics": "<CTR: X%, CPL: ₹X, Spend wasted: ₹X, Views: X, Video view rate: X%, Skip rate: X% (Y people), Hold rate: X% (Y people)>",
       "whatToChange": "<Specific creative brief for replacement — exact hook concept, visual style, messaging angle, CTA>"
     },
     "creativeRankings": [

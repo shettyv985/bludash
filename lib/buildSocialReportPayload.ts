@@ -16,9 +16,11 @@ export interface SocialPost {
   comments: number;
   shares: number;
   saves: number;
+  views: number;
   engagementRate: string;
   avgWatchTime?: number | null;
   skipRate?: number | null; // reels_skip_rate — % of viewers who skipped in first 3s
+  holdRate?: number | null;
 }
 
 export interface BoostedPostData {
@@ -86,11 +88,15 @@ export interface AnalyzedPost {
   totalComments: number;
   totalShares: number;
   totalReach: number;
+  views: number;
   // derived
   engagementRate: number;
   engagementRateFlag: "good" | "warn" | "bad";
   avgWatchTime: number | null;
   skipRate: number | null; // ← NEW: reel skip rate
+  holdRate: number | null;
+  skipCount: number;
+  holdCount: number;
   // shares
   reachShare: number;
   engagementShare: number;
@@ -154,6 +160,9 @@ export interface SocialReportPayload {
     igBoostedPostCount: number;
     igTotalAdSpend: number;
     igReelCount: number;
+    igReelViews: number;
+    igReelSkippedPeople: number;
+    igReelHeldPeople: number;
     igCarouselCount: number;
     igImageCount: number;
     // averages
@@ -161,6 +170,7 @@ export interface SocialReportPayload {
     avgIgEngagementRate: number;
     avgIgReelWatchTime: number | null;
     avgIgReelSkipRate: number | null; // ← NEW
+    avgIgReelHoldRate: number | null;
     // reach breakdowns (organic vs paid split)
     fbReachBreakdown: ReachBreakdown;  // ← NEW
     igReachBreakdown: ReachBreakdown;  // ← NEW
@@ -185,6 +195,8 @@ export interface SocialReportPayload {
     igBestWatchTime: AnalyzedPost[];   // ← NEW
     igWorstSkipRate: AnalyzedPost[];   // ← NEW (highest skip = worst hook)
     igBestSkipRate: AnalyzedPost[];    // ← NEW (lowest skip = best hook retention)
+    igTopReelViews: AnalyzedPost[];
+    igBestHoldRate: AnalyzedPost[];
     boostedPosts: AnalyzedPost[];
     highSpendLowEngagement: AnalyzedPost[];
   };
@@ -211,6 +223,10 @@ export interface SocialReportPayload {
     igImageAvgEngagement: number;
     igReelAvgWatchTime: number | null;  // ← NEW
     igReelAvgSkipRate: number | null;   // ← NEW
+    igReelAvgHoldRate: number | null;
+    igReelViews: number;
+    igReelSkippedPeople: number;
+    igReelHeldPeople: number;
   };
   // ── NEW: MoM / period comparison ─────────────────────────────────────────
   comparison: {
@@ -243,6 +259,11 @@ function flag(value: number, bench: { good: number; ok: number }): "good" | "war
 
 function round(n: number, d = 2) {
   return +n.toFixed(d);
+}
+
+function peopleFromRate(views: number, rate?: number | null): number {
+  if (!views || rate == null) return 0;
+  return Math.round((views * rate) / 100);
 }
 
 function topN<T>(arr: T[], key: (x: T) => number, n = 5, asc = false): T[] {
@@ -410,10 +431,14 @@ export function buildSocialReportPayload(
       totalComments,
       totalShares,
       totalReach,
+      views: post.views ?? 0,
       engagementRate,
       engagementRateFlag: flag(engagementRate, BENCHMARKS.engagementRate),
       avgWatchTime: post.avgWatchTime ?? null,
       skipRate: post.skipRate ?? null, // ← NEW
+      holdRate: post.holdRate ?? null,
+      skipCount: peopleFromRate(post.views ?? 0, post.skipRate),
+      holdCount: peopleFromRate(post.views ?? 0, post.holdRate),
       reachShare: 0, // filled below
       engagementShare: 0, // filled below
     };
@@ -459,6 +484,9 @@ export function buildSocialReportPayload(
   const igReels = analyzedIG.filter((p) => p.type === "REEL");
   const igCarousels = analyzedIG.filter((p) => p.type === "CAROUSEL");
   const igImages = analyzedIG.filter((p) => p.type === "IMAGE");
+  const igReelViews = igReels.reduce((s, p) => s + p.views, 0);
+  const igReelSkippedPeople = igReels.reduce((s, p) => s + p.skipCount, 0);
+  const igReelHeldPeople = igReels.reduce((s, p) => s + p.holdCount, 0);
 
   const reelsWithWatch = igReels.filter((p) => p.avgWatchTime != null);
   const avgReelWatch = reelsWithWatch.length
@@ -469,6 +497,10 @@ export function buildSocialReportPayload(
   const reelsWithSkip = igReels.filter((p) => p.skipRate != null);
   const avgReelSkipRate = reelsWithSkip.length
     ? round(reelsWithSkip.reduce((s, p) => s + (p.skipRate ?? 0), 0) / reelsWithSkip.length, 1)
+    : null;
+  const reelsWithHold = igReels.filter((p) => p.holdRate != null);
+  const avgReelHoldRate = reelsWithHold.length
+    ? round(reelsWithHold.reduce((s, p) => s + (p.holdRate ?? 0), 0) / reelsWithHold.length, 1)
     : null;
 
   // ── Resolved reach breakdowns (use passed-in values or derive from posts) ─
@@ -519,12 +551,16 @@ export function buildSocialReportPayload(
     igBoostedPostCount: igBoosted.length,
     igTotalAdSpend: round(igBoosted.reduce((s, p) => s + p.amountSpent, 0)),
     igReelCount: igReels.length,
+    igReelViews,
+    igReelSkippedPeople,
+    igReelHeldPeople,
     igCarouselCount: igCarousels.length,
     igImageCount: igImages.length,
     avgFbEngagementRate: avgEngagement(analyzedFB),
     avgIgEngagementRate: avgEngagement(analyzedIG),
     avgIgReelWatchTime: avgReelWatch,
     avgIgReelSkipRate: avgReelSkipRate, // ← NEW
+    avgIgReelHoldRate: avgReelHoldRate,
     fbReachBreakdown: resolvedFbReachBreakdown, // ← NEW
     igReachBreakdown: resolvedIgReachBreakdown, // ← NEW
   };
@@ -637,11 +673,7 @@ export function buildSocialReportPayload(
   // ── NEW: reel-specific rankings ───────────────────────────────────────────
   const reelsWithWatchAnalyzed = igReels.filter((p) => p.avgWatchTime != null);
   const reelsWithSkipAnalyzed = igReels.filter((p) => p.skipRate != null);
-
-  // Limit contentRankings to top 20 by engagement to prevent Manus truncation
-  const contentRankingsPool = [...allAnalyzed]
-    .sort((a, b) => b.engagementRate - a.engagementRate)
-    .slice(0, 20);
+  const reelsWithHoldAnalyzed = igReels.filter((p) => p.holdRate != null);
 
   return {
     meta: { client, from, to, platform, generatedAt: new Date().toISOString() },
@@ -662,6 +694,8 @@ export function buildSocialReportPayload(
       igBestWatchTime: topN(reelsWithWatchAnalyzed, (p) => p.avgWatchTime ?? 0, 5),       // ← NEW
       igWorstSkipRate: topN(reelsWithSkipAnalyzed, (p) => p.skipRate ?? 0, 5),             // ← NEW (highest skip = worst)
       igBestSkipRate: topN(reelsWithSkipAnalyzed, (p) => p.skipRate ?? 0, 5, true),        // ← NEW (lowest skip = best)
+      igTopReelViews: topN(igReels, (p) => p.views, 5),
+      igBestHoldRate: topN(reelsWithHoldAnalyzed, (p) => p.holdRate ?? 0, 5),
       boostedPosts,
       highSpendLowEngagement: highSpendLowEng,
     },
@@ -683,6 +717,10 @@ export function buildSocialReportPayload(
       igImageAvgEngagement: avgEngagement(igImages),
       igReelAvgWatchTime: avgReelWatch,   // ← NEW
       igReelAvgSkipRate: avgReelSkipRate, // ← NEW
+      igReelAvgHoldRate: avgReelHoldRate,
+      igReelViews,
+      igReelSkippedPeople,
+      igReelHeldPeople,
     },
     // ── NEW: full MoM comparison block ───────────────────────────────────────
     comparison: buildComparison(
