@@ -56,6 +56,7 @@ export interface AnalyzedAd {
   id: string;
   name: string;
   campaign: string;
+  objective: string;
   adSet: string;
   status: string;
   isVideo: boolean;
@@ -249,6 +250,7 @@ export function buildReportPayload(
       id: ad.id,
       name: ad.name,
       campaign: ad.campaignName,
+      objective: ad.campaignObjective,
       adSet: ad.adSetName,
       status: ad.status,
       isVideo: ad.isVideo,

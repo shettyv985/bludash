@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Loader2, Send } from "lucide-react";
 import ClientDropdown from "@/components/dashboard/ClientDropdown";
 import OptionDropdown from "@/components/dashboard/OptionDropdown";
 import DateRangePicker from "@/components/dashboard/DateRangePicker";
@@ -24,6 +25,8 @@ export default function DashboardPage() {
   const [platform, setPlatform] = useState<Platform>("BOTH");
   const [showReport, setShowReport] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [digestSending, setDigestSending] = useState(false);
+  const [digestStatus, setDigestStatus] = useState("");
 
   useEffect(() => {
     const stored = localStorage.getItem("bludash_user");
@@ -52,6 +55,49 @@ export default function DashboardPage() {
   const handleGenerate = () => {
     if (!client || !option || !fromDate || !toDate) return;
     setShowReport(true);
+  };
+
+  const handleSendDigestEmail = async () => {
+    if (digestSending) return;
+    if (!client || !option || !fromDate || !toDate) {
+      setDigestStatus("Select client, report type, and date range first");
+      return;
+    }
+
+    setDigestSending(true);
+    setDigestStatus("");
+
+    try {
+      const mode =
+        option === "performance"
+          ? "performance"
+          : option === "social_media"
+            ? "social"
+            : "both";
+      const res = await fetch("/api/creative-digest", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          client,
+          from: fromDate,
+          to: toDate,
+          mode,
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.error || "Failed to send email");
+      }
+
+      setDigestStatus(`Sent ${client} email to ${data.recipient || "operations@blusteak.com"}`);
+    } catch (err) {
+      setDigestStatus(err instanceof Error ? err.message : "Failed to send email");
+    } finally {
+      setDigestSending(false);
+    }
   };
 
   const handleBack = () => setShowReport(false);
@@ -346,6 +392,40 @@ export default function DashboardPage() {
                   >
                     {isReady ? "Generate report" : "Complete all fields to continue"}
                   </button>
+
+                  {isAdmin && (
+                    <div className="mt-5 pt-4 border-t border-white/[0.05]">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className={`text-[10px] tracking-[0.18em] uppercase font-semibold ${dark ? "text-white/25" : "text-slate-400"}`}>
+                          Manual email
+                        </span>
+                        <span className={`text-[10px] font-medium ${dark ? "text-white/25" : "text-slate-400"}`}>
+                          Selected client
+                        </span>
+                      </div>
+                      <button
+                        onClick={handleSendDigestEmail}
+                        disabled={digestSending || !isReady}
+                        className={`w-full py-[11px] rounded-[10px] border text-sm font-medium tracking-wide transition-all duration-200 disabled:opacity-45 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${
+                          dark
+                            ? "border-white/10 bg-white/[0.04] text-white/70 hover:bg-white/[0.07]"
+                            : "border-slate-300 bg-white/70 text-slate-700 hover:bg-white"
+                        }`}
+                      >
+                        {digestSending ? (
+                          <Loader2 size={15} className="animate-spin" />
+                        ) : (
+                          <Send size={15} />
+                        )}
+                        {digestSending ? "Sending email..." : "Send selected client email"}
+                      </button>
+                      {digestStatus && (
+                        <p className={`mt-2 text-[11px] text-center ${dark ? "text-white/35" : "text-slate-500"}`}>
+                          {digestStatus}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

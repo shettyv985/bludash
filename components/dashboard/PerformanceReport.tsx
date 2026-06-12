@@ -1322,11 +1322,11 @@ export default function PerformanceReport({ client, from, to, dark, onBack }: Pr
 
   // ── Auto-trigger PDF as soon as Manus returns reportData ──────────────────
 // ── Auto-trigger Gemini HTML report as soon as Manus returns reportData ───
-// ── Stage 2: As soon as Manus JSON analysis is done, kick off HTML build ──
+// ── Stage 2: As soon as GPT JSON analysis is done, kick off HTML build ──
 useEffect(() => {
   if (manusState.status === "done" && manusState.reportData) {
     const payload = buildReportPayload(allAds, campaigns, client, from, to, accountInsight);
-    setBuilding("Manus is now building your HTML report…");
+    setBuilding("GPT-5.5 is now building your HTML report...");
     generateReportPDF(
       payload,
       manusState.reportData,

@@ -50,6 +50,82 @@ interface Props {
   onBack: () => void;
 }
 
+type SocialMediaConfig = {
+  token: string;
+  fbPageId: string | null;
+  igUserId: string | null;
+  igProfileUrl?: string | null;
+  igUsername?: string | null;
+  igResolveError?: string;
+  missing?: string[];
+  error?: string;
+};
+
+type PublicInstagramProfile = {
+  username: string;
+  profileUrl: string;
+  reason: string;
+  fullName?: string;
+  biography?: string;
+  profilePic?: string | null;
+  followers?: number | null;
+  totalPosts?: number | null;
+  posts: PublicInstagramPost[];
+  summary: {
+    posts: number;
+    likes: number;
+    comments: number;
+    shares: null;
+  };
+  coverage?: {
+    fetchedPosts: number;
+    scrapedPosts?: number;
+    manualPosts?: number;
+    pagesFetched: number;
+    maxPages: number;
+    moreAvailable: boolean;
+    limited: boolean;
+    source?: string;
+    warning?: string;
+    rangeFullyCovered?: boolean;
+    hitPageCap?: boolean;
+    oldestPostDate?: string | null;
+    newestPostDate?: string | null;
+  };
+  scrapeError?: string;
+};
+
+type PublicInstagramPost = {
+  id: string;
+  shortcode: string;
+  caption: string;
+  timestamp: number;
+  createdTime: string;
+  permalink: string;
+  thumbnail: string | null;
+  type: string;
+  likes: number | null;
+  comments: number | null;
+  shares: null;
+  source?: "instagram" | "manual";
+};
+
+type PublicInstagramApiResponse = {
+  profile?: {
+    username?: string;
+    fullName?: string;
+    biography?: string;
+    profilePic?: string | null;
+    followers?: number | null;
+    totalPosts?: number | null;
+    profileUrl?: string;
+  };
+  posts?: PublicInstagramPost[];
+  summary?: PublicInstagramProfile["summary"];
+  coverage?: PublicInstagramProfile["coverage"];
+  error?: string;
+};
+
 const STEPS = [
   "Connecting to Meta API...",
   "Fetching Facebook posts...",
@@ -60,6 +136,108 @@ const STEPS = [
 ];
 
 const BASE = "https://graph.facebook.com/v25.0";
+
+function instagramProfileUrl(username: string, fallback?: string | null): string {
+  if (fallback?.startsWith("http")) return fallback;
+  return username ? `https://www.instagram.com/${username}/` : "";
+}
+
+function publicInstagramFallback(
+  cfg: SocialMediaConfig,
+  platform: string,
+  client: string
+): PublicInstagramProfile | null {
+  if (cfg.token || (platform !== "IG" && platform !== "BOTH")) return null;
+
+  const username =
+    cfg.igUsername ||
+    cfg.igProfileUrl?.replace(/^https?:\/\/(www\.)?instagram\.com\//i, "").split(/[/?#]/)[0] ||
+    "";
+  const profileUrl = instagramProfileUrl(username, cfg.igProfileUrl);
+  if (!username && !profileUrl) return null;
+
+  return {
+    username,
+    profileUrl,
+    reason: `No ${client}_TOKEN is configured, so only public profile context is available.`,
+    posts: [],
+    summary: {
+      posts: 0,
+      likes: 0,
+      comments: 0,
+      shares: null,
+    },
+  };
+}
+
+async function fetchPublicInstagramReport(
+  client: string,
+  from: string,
+  to: string,
+  fallback: PublicInstagramProfile
+): Promise<PublicInstagramProfile> {
+  try {
+    const params = new URLSearchParams({ client, from, to });
+    const res = await fetch(`/api/public-instagram?${params.toString()}`);
+    const json = (await res.json()) as PublicInstagramApiResponse;
+
+    if (!res.ok || json.error) {
+      return {
+        ...fallback,
+        scrapeError: json.error || "Could not fetch public Instagram posts.",
+      };
+    }
+
+    return {
+      ...fallback,
+      username: json.profile?.username || fallback.username,
+      profileUrl: json.profile?.profileUrl || fallback.profileUrl,
+      fullName: json.profile?.fullName || "",
+      biography: json.profile?.biography || "",
+      profilePic: json.profile?.profilePic || null,
+      followers: json.profile?.followers ?? null,
+      totalPosts: json.profile?.totalPosts ?? null,
+      posts: json.posts || [],
+      summary: json.summary || fallback.summary,
+      coverage: json.coverage,
+    };
+  } catch {
+    return {
+      ...fallback,
+      scrapeError: "Could not fetch public Instagram posts.",
+    };
+  }
+}
+
+function socialConfigError(
+  cfg: SocialMediaConfig,
+  platform: string,
+  client: string
+): string | null {
+  if (cfg.error) return cfg.error;
+
+  if (!cfg.token) {
+    return `Missing Meta token for ${client}. Add ${client}_TOKEN; an Instagram URL or username alone cannot fetch report insights.`;
+  }
+
+  if ((platform === "FB" || platform === "BOTH") && !cfg.fbPageId) {
+    return `Missing Facebook Page ID for ${client}. Add ${client}_FB_PAGE_ID.`;
+  }
+
+  if ((platform === "IG" || platform === "BOTH") && !cfg.igUserId) {
+    const profile = cfg.igUsername
+      ? `@${cfg.igUsername}`
+      : cfg.igProfileUrl || "this Instagram profile";
+    const resolveHint = cfg.fbPageId
+      ? "Make sure that profile is the Instagram Business account linked to the configured Facebook Page, or add the numeric IG user ID directly."
+      : `Add ${client}_FB_PAGE_ID as well, so the app can try to resolve the linked Instagram Business account.`;
+    const metaDetail = cfg.igResolveError ? ` Meta response: ${cfg.igResolveError}` : "";
+
+    return `Missing Instagram Business ID for ${profile}. Add ${client}_IG_USER_ID. ${resolveHint}${metaDetail}`;
+  }
+
+  return null;
+}
 
 type SortKey =
   | "default"
@@ -1451,7 +1629,7 @@ function SummarySection({
                       ? "high — hook needs work"
                       : avgSkipOverall > 25
                         ? "moderate skip rate"
-                        : "great hook retention"}
+                        : "low skip rate"}
                 </p>
               </div>
 
@@ -1949,9 +2127,6 @@ interface SocialManusState {
   error: string | null;
 }
 
-const SOCIAL_POLL_MS = 5000;
-const SOCIAL_MAX_POLL = 180;
-
 async function socialSafeFetch(url: string, options?: RequestInit) {
   try {
     const res = await fetch(url, options);
@@ -1978,111 +2153,44 @@ function useSocialManusReport() {
     error: null,
   });
 
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const pollCount = useRef(0);
-
-  const stopPolling = useCallback(() => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-  }, []);
-
-  const poll = useCallback(
-    async (taskId: string) => {
-      pollCount.current += 1;
-      if (pollCount.current > SOCIAL_MAX_POLL) {
-        stopPolling();
-        setState((s) => ({
-          ...s,
-          status: "error",
-          error: "Report timed out after 15 minutes.",
-        }));
-        return;
-      }
-
-      const { ok, data } = await socialSafeFetch(
-        `/api/manus-poll?task_id=${encodeURIComponent(taskId)}`
-      );
-
-      if (!ok) {
-        stopPolling();
-        setState((s) => ({
-          ...s,
-          status: "error",
-          error: data?.error ?? "Polling failed",
-        }));
-        return;
-      }
-
-      const status: string = data?.status ?? "running";
-
-      if (status === "stopped") {
-        stopPolling();
-        setState({
-          status: "done",
-          brief: "Deep analysis complete — now building HTML report…",
-          reportData: data.reportData ?? null,
-          error: null,
-        });
-        return;
-      }
-
-      if (status === "error") {
-        stopPolling();
-        setState((s) => ({
-          ...s,
-          status: "error",
-          error: data?.error ?? "Manus task failed",
-        }));
-        return;
-      }
-
-      setState((s) => ({
-        ...s,
-        status: status === "waiting" ? "waiting" : "running",
-        brief: data?.brief ?? s.brief,
-      }));
-
-      timerRef.current = setTimeout(() => poll(taskId), SOCIAL_POLL_MS);
-    },
-    [stopPolling]
-  );
-
   const generateReport = useCallback(
     async (payload: any) => {
-      stopPolling();
-      pollCount.current = 0;
       setState({
         status: "creating",
-        brief: "Submitting to Manus for deep social analysis…",
+        brief: "Submitting to GPT-5.5 for deep social analysis...",
         reportData: null,
         error: null,
       });
 
-      const { ok, data } = await socialSafeFetch("/api/social-manus-report", {
+      setState((s) => ({
+        ...s,
+        status: "running",
+        brief: "GPT-5.5 is analyzing your social data...",
+      }));
+
+      const { ok, data } = await socialSafeFetch("/api/social-gpt-report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ payload }),
       });
 
-      if (!ok || !data?.taskId) {
+      if (!ok || !data?.reportData) {
         setState((s) => ({
           ...s,
           status: "error",
-          error: data?.error ?? "Failed to create Manus task",
+          error: data?.error ?? "Failed to generate GPT social report",
         }));
         return;
       }
 
-      setState((s) => ({
-        ...s,
-        status: "running",
-        brief: "Manus AI is performing deep analysis of your social data…",
-      }));
-      timerRef.current = setTimeout(() => poll(data.taskId), SOCIAL_POLL_MS);
+      setState({
+        status: "done",
+        brief: "Deep analysis complete - now building HTML report...",
+        reportData: data.reportData ?? null,
+        error: null,
+      });
     },
-    [poll, stopPolling]
+    []
   );
 
   const setBuilding = useCallback((brief: string) => {
@@ -2090,11 +2198,274 @@ function useSocialManusReport() {
   }, []);
 
   const dismiss = useCallback(() => {
-    stopPolling();
     setState({ status: "idle", brief: "", reportData: null, error: null });
-  }, [stopPolling]);
+  }, []);
 
   return { state, generateReport, setBuilding, dismiss };
+}
+
+function PublicInstagramReport({
+  client,
+  fromLabel,
+  toLabel,
+  profile,
+  dark,
+  onBack,
+}: {
+  client: string;
+  fromLabel: string;
+  toLabel: string;
+  profile: PublicInstagramProfile;
+  dark: boolean;
+  onBack: () => void;
+}) {
+  const metricCards = [
+    { label: "Posts", value: profile.summary.posts.toLocaleString() },
+    { label: "Likes", value: profile.summary.likes.toLocaleString() },
+    { label: "Comments", value: profile.summary.comments.toLocaleString() },
+    { label: "Shares", value: "N/A" },
+    { label: "Followers", value: profile.followers != null ? profile.followers.toLocaleString() : "N/A" },
+    { label: "Total posts", value: profile.totalPosts != null ? profile.totalPosts.toLocaleString() : "N/A" },
+    { label: "Reach", value: "N/A" },
+    { label: "Saves", value: "N/A" },
+  ];
+  const coverage = profile.coverage;
+
+  return (
+    <div className="w-full max-w-[1120px] mx-auto flex flex-col gap-6 pb-16 px-3 sm:px-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <button
+          onClick={onBack}
+          className={`flex items-center gap-1.5 text-[12px] px-3 py-1.5 rounded-lg border transition-all ${
+            dark
+              ? "border-white/10 text-white/40 hover:text-white/80 hover:border-white/20"
+              : "border-black/10 text-black/40 hover:text-black/70"
+          }`}
+        >
+          ← Back
+        </button>
+
+        <div className="flex items-center gap-2">
+          <div className={`h-px w-8 ${dark ? "bg-white/10" : "bg-black/10"}`} />
+          <span className={`text-[11px] tracking-widest uppercase font-medium ${dark ? "text-white/25" : "text-black/25"}`}>
+            Public Instagram Report &middot; {fromLabel} &ndash; {toLabel}
+          </span>
+          <div className={`h-px w-8 ${dark ? "bg-white/10" : "bg-black/10"}`} />
+        </div>
+
+        {profile.profileUrl && (
+          <a
+            href={profile.profileUrl}
+            target="_blank"
+            rel="noreferrer"
+            className={`flex items-center gap-1.5 text-[12px] px-3 py-1.5 rounded-lg border font-medium transition-all ${
+              dark
+                ? "border-pink-500/30 text-pink-300 hover:bg-pink-500/10"
+                : "border-pink-600/30 text-pink-700 hover:bg-pink-50"
+            }`}
+          >
+            Open profile
+          </a>
+        )}
+      </div>
+
+      <section
+        className={`rounded-[22px] border p-6 sm:p-7 ${
+          dark
+            ? "bg-white/[0.035] border-white/[0.08]"
+            : "bg-white border-slate-200 shadow-[0_18px_50px_rgba(15,23,42,0.06)]"
+        }`}
+      >
+        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
+          <div className="flex items-start gap-4">
+            {profile.profilePic ? (
+              <img
+                src={profile.profilePic}
+                alt=""
+                className="w-12 h-12 rounded-2xl object-cover shrink-0"
+              />
+            ) : (
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500 via-pink-500 to-orange-400 flex items-center justify-center shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.4">
+                  <rect x="2" y="2" width="20" height="20" rx="5" />
+                  <circle cx="12" cy="12" r="4" />
+                  <circle cx="17.5" cy="6.5" r="1" fill="white" stroke="none" />
+                </svg>
+              </div>
+            )}
+
+            <div>
+              <p className={`text-[11px] tracking-[0.18em] uppercase font-semibold ${dark ? "text-white/35" : "text-slate-500"}`}>
+                {client}
+              </p>
+              <h2 className={`text-2xl sm:text-3xl font-semibold mt-1 ${dark ? "text-white" : "text-slate-950"}`}>
+                {profile.fullName || (profile.username ? `@${profile.username}` : "Instagram profile")}
+              </h2>
+              {profile.fullName && profile.username && (
+                <p className={`text-[13px] mt-1 ${dark ? "text-white/45" : "text-slate-500"}`}>
+                  @{profile.username}
+                </p>
+              )}
+              {profile.profileUrl && (
+                <p className={`text-[13px] mt-2 break-all ${dark ? "text-white/45" : "text-slate-500"}`}>
+                  {profile.profileUrl}
+                </p>
+              )}
+              {profile.biography && (
+                <p className={`text-[13px] mt-3 max-w-2xl leading-5 ${dark ? "text-white/55" : "text-slate-600"}`}>
+                  {profile.biography}
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className={`rounded-2xl border px-4 py-3 max-w-md ${
+            dark ? "border-amber-400/20 bg-amber-400/[0.08]" : "border-amber-200 bg-amber-50"
+          }`}>
+            <p className={`text-[11px] tracking-[0.16em] uppercase font-semibold ${dark ? "text-amber-200/80" : "text-amber-800"}`}>
+              Public data
+            </p>
+            <p className={`text-[13px] mt-1 leading-5 ${dark ? "text-white/55" : "text-slate-600"}`}>
+              {profile.reason} Likes and comments are fetched from public post data. Shares, saves, reach, profile views, and paid data are not public.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {metricCards.map((metric) => (
+          <div
+            key={metric.label}
+            className={`rounded-2xl border p-4 ${
+              dark ? "bg-white/[0.025] border-white/[0.07]" : "bg-white border-slate-200"
+            }`}
+          >
+            <p className={`text-[11px] font-semibold uppercase tracking-[0.14em] ${dark ? "text-white/35" : "text-slate-500"}`}>
+              {metric.label}
+            </p>
+            <p className={`text-2xl font-semibold mt-2 ${dark ? "text-white/80" : "text-slate-900"}`}>
+              {metric.value}
+            </p>
+          </div>
+        ))}
+      </section>
+
+      {(profile.scrapeError || coverage?.limited) && (
+        <div className={`rounded-2xl border px-4 py-3 ${
+          dark ? "border-amber-400/20 bg-amber-400/[0.08] text-amber-100/80" : "border-amber-200 bg-amber-50 text-amber-900"
+        }`}>
+          <p className="text-[13px] leading-5">
+            {profile.scrapeError ||
+              coverage?.warning ||
+              `Fetched ${coverage?.fetchedPosts ?? 0} public posts across ${coverage?.pagesFetched ?? 0} pages. Older posts may exist beyond this public fetch limit.`}
+          </p>
+        </div>
+      )}
+
+      <section
+        className={`rounded-[22px] border overflow-hidden ${
+          dark
+            ? "bg-white/[0.025] border-white/[0.07]"
+            : "bg-white border-slate-200 shadow-[0_18px_50px_rgba(15,23,42,0.05)]"
+        }`}
+      >
+        <div className={`px-5 py-4 border-b ${dark ? "border-white/[0.06]" : "border-slate-200"}`}>
+          <p className={`text-[11px] tracking-[0.18em] uppercase font-semibold ${dark ? "text-white/35" : "text-slate-500"}`}>
+            Posts in selected range
+          </p>
+        </div>
+
+        {profile.posts.length === 0 ? (
+          <div className={`px-5 py-10 text-center text-[13px] ${dark ? "text-white/45" : "text-slate-500"}`}>
+            No public posts were found in this date range.
+          </div>
+        ) : (
+          <div className="divide-y divide-white/[0.06]">
+            {profile.posts.map((post) => {
+              const dateLabel = post.createdTime
+                ? new Date(post.createdTime).toLocaleDateString("en-IN", {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                  })
+                : "Unknown date";
+
+              return (
+                <article
+                  key={post.id || post.shortcode}
+                  className={`grid grid-cols-1 md:grid-cols-[112px_1fr] gap-4 px-5 py-5 ${dark ? "hover:bg-white/[0.025]" : "hover:bg-slate-50"}`}
+                >
+                  <div className={`w-full md:w-28 aspect-square rounded-2xl overflow-hidden ${dark ? "bg-white/[0.05]" : "bg-slate-100"}`}>
+                    {post.thumbnail ? (
+                      <img src={post.thumbnail} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-[11px] uppercase tracking-[0.14em] text-slate-400">
+                        {post.type}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="min-w-0 flex flex-col gap-3">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`text-[11px] px-2 py-1 rounded-full border ${dark ? "border-white/10 text-white/45" : "border-slate-200 text-slate-500"}`}>
+                          {post.type}
+                        </span>
+                        {post.source === "manual" && (
+                          <span className={`text-[11px] px-2 py-1 rounded-full border ${
+                            dark ? "border-amber-400/25 text-amber-200/80" : "border-amber-200 text-amber-700"
+                          }`}>
+                            Manual
+                          </span>
+                        )}
+                        <span className={`text-[12px] ${dark ? "text-white/45" : "text-slate-500"}`}>
+                          {dateLabel}
+                        </span>
+                      </div>
+                      {post.permalink && (
+                        <a
+                          href={post.permalink}
+                          target="_blank"
+                          rel="noreferrer"
+                          className={`text-[12px] font-medium ${dark ? "text-pink-300 hover:text-pink-200" : "text-pink-700 hover:text-pink-800"}`}
+                        >
+                          Open post
+                        </a>
+                      )}
+                    </div>
+
+                    <p className={`text-[13px] leading-5 line-clamp-3 ${dark ? "text-white/65" : "text-slate-700"}`}>
+                      {post.caption || "No caption"}
+                    </p>
+
+                    <div className="grid grid-cols-3 gap-2 max-w-md">
+                      {[
+                        { label: "Likes", value: post.likes != null ? post.likes.toLocaleString() : "N/A" },
+                        { label: "Comments", value: post.comments != null ? post.comments.toLocaleString() : "N/A" },
+                        { label: "Shares", value: "N/A" },
+                      ].map((item) => (
+                        <div
+                          key={item.label}
+                          className={`rounded-xl border px-3 py-2 ${dark ? "border-white/[0.07] bg-white/[0.025]" : "border-slate-200 bg-slate-50"}`}
+                        >
+                          <p className={`text-[10px] uppercase tracking-[0.14em] font-semibold ${dark ? "text-white/30" : "text-slate-500"}`}>
+                            {item.label}
+                          </p>
+                          <p className={`text-[15px] font-semibold mt-1 ${dark ? "text-white/80" : "text-slate-900"}`}>
+                            {item.value}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
+    </div>
+  );
 }
 
 export default function SocialMediaReport({
@@ -2110,6 +2481,7 @@ export default function SocialMediaReport({
   const [progress, setProgress] = useState(0);
   const [data, setData] = useState<ReportData | null>(null);
   const [error, setError] = useState("");
+  const [publicInstagram, setPublicInstagram] = useState<PublicInstagramProfile | null>(null);
   const [activeTab, setActiveTab] = useState<"FB" | "IG">(
     platform === "IG" ? "IG" : "FB"
   );
@@ -2194,7 +2566,7 @@ export default function SocialMediaReport({
   }
         
       );
-      setBuilding("Manus is now building your HTML social report…");
+        setBuilding("GPT-5.5 is now building your HTML social report...");
       generateSocialReportPDF(
         payload,
         manusState.reportData,
@@ -2311,7 +2683,30 @@ export default function SocialMediaReport({
 
     try {
       const cfgRes = await fetch(`/api/social-media?client=${client}`);
-      const cfg = await cfgRes.json();
+      const cfg = (await cfgRes.json()) as SocialMediaConfig;
+      const publicFallback = publicInstagramFallback(cfg, platform, client);
+      if (publicFallback) {
+        setComparisonAudience({
+          fbFollows: { follows: 0, unfollows: 0 },
+          igFollows: { follows: 0, unfollows: 0 },
+          fbPageViews: 0,
+          igProfileViews: 0,
+        });
+        setComparisonData({ fbPosts: [], igPosts: [] });
+        return;
+      }
+
+      const cfgError = socialConfigError(cfg, platform, client);
+      if (cfgError) {
+        setComparisonAudience({
+          fbFollows: { follows: 0, unfollows: 0 },
+          igFollows: { follows: 0, unfollows: 0 },
+          fbPageViews: 0,
+          igProfileViews: 0,
+        });
+        setComparisonData({ fbPosts: [], igPosts: [] });
+        return;
+      }
 
       let fbPosts: Post[] = [];
       let igPosts: Post[] = [];
@@ -2580,18 +2975,42 @@ export default function SocialMediaReport({
     setLoading(true);
     setData(null);
     setError("");
+    setPublicInstagram(null);
     setStep(0);
     setProgress(0);
 
-    let cfg: { token: string; fbPageId: string; igUserId: string };
+    let cfg: SocialMediaConfig;
 
     try {
       const cfgRes = await fetch(`/api/social-media?client=${client}`);
-      cfg = await cfgRes.json();
-      setCfgToken(cfg.token);
+      cfg = (await cfgRes.json()) as SocialMediaConfig;
+      setCfgToken(cfg.token || "");
 
-      if (!cfg.token) {
-        setError("Invalid client config");
+      const publicFallback = publicInstagramFallback(cfg, platform, client);
+      if (publicFallback) {
+        const publicReport = await fetchPublicInstagramReport(
+          client,
+          from,
+          to,
+          publicFallback
+        );
+        setPublicInstagram(publicReport);
+        setData({ fbPosts: [], igPosts: [] });
+        setFbFollows({ follows: 0, unfollows: 0 });
+        setIgFollows({ follows: 0, unfollows: 0 });
+        setFbPageViews(0);
+        setIgProfileViews(0);
+        setFbReachBreakdown(emptyReach);
+        setIgReachBreakdown(emptyReach);
+        setActiveTab("IG");
+        setProgress(100);
+        setLoading(false);
+        return;
+      }
+
+      const cfgError = socialConfigError(cfg, platform, client);
+      if (cfgError) {
+        setError(cfgError);
         setLoading(false);
         return;
       }
@@ -3093,6 +3512,19 @@ export default function SocialMediaReport({
           ← Back
         </button>
       </div>
+    );
+  }
+
+  if (publicInstagram) {
+    return (
+      <PublicInstagramReport
+        client={client}
+        fromLabel={fromLabel}
+        toLabel={toLabel}
+        profile={publicInstagram}
+        dark={dark}
+        onBack={onBack}
+      />
     );
   }
 

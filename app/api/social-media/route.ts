@@ -1,6 +1,9 @@
 // C:\Users\Varun Shetty\Desktop\New folder\bludash\app\api\social-media\route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { getMetaClientConfig } from "@/lib/metaClientConfig";
+import {
+  getMissingMetaConfigFields,
+  getResolvedMetaClientConfig,
+} from "@/lib/metaClientConfig";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -8,8 +11,11 @@ export async function GET(req: NextRequest) {
 
   if (!client) return NextResponse.json({ error: "Missing client" }, { status: 400 });
 
-  const config = getMetaClientConfig(client);
+  const config = await getResolvedMetaClientConfig(client);
   if (!config) return NextResponse.json({ error: "Invalid client" }, { status: 400 });
 
-  return NextResponse.json(config);
+  return NextResponse.json({
+    ...config,
+    missing: getMissingMetaConfigFields(config, "social"),
+  });
 }

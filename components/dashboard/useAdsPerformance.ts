@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 
-const BASE = "https://graph.facebook.com/v25.0";
-
 export interface AdInsight {
   spend: number;
   reach: number;
@@ -77,289 +75,60 @@ interface UseAdsPerformanceResult {
   refetch: () => Promise<void>;
 }
 
-type MetaAction = {
-  action_type?: string;
-  value?: string | number;
+type AdsPerformanceSnapshot = {
+  ads: Ad[];
+  campaigns: Campaign[];
+  accountInsight: AdInsight | null;
+  token: string;
 };
 
-type MetaCreative = {
-  thumbnail_url?: string;
-  image_url?: string;
-  video_id?: string;
+type AdsPerformanceCacheEntry = {
+  expiresAt: number;
+  value: AdsPerformanceSnapshot;
 };
 
-type MetaCampaign = {
-  id: string;
-  name: string;
-  objective?: string;
-  status?: string;
-  effective_status?: string;
+type AdsPerformanceResponse = Partial<AdsPerformanceSnapshot> & {
+  error?: string;
 };
 
-type MetaAdSet = {
-  id: string;
-  name: string;
-  status?: string;
-  effective_status?: string;
-  campaign_id?: string;
-  daily_budget?: string | number | null;
-  lifetime_budget?: string | number | null;
-};
+const ADS_PERFORMANCE_CACHE_TTL_MS = 5 * 60 * 1000;
+const adsPerformanceCache = new Map<string, AdsPerformanceCacheEntry>();
 
-type MetaAd = {
-  id: string;
-  name?: string;
-  status?: string;
-  effective_status?: string;
-  campaign_id?: string;
-  adset_id?: string;
-  creative?: MetaCreative;
-};
+function getCachedAdsPerformance(key: string) {
+  const cached = adsPerformanceCache.get(key);
+  if (!cached) return null;
 
-type MetaInsight = {
-  ad_id?: string;
-  ad_name?: string;
-  adset_id?: string;
-  adset_name?: string;
-  campaign_id?: string;
-  campaign_name?: string;
-  spend?: string;
-  reach?: string;
-  impressions?: string;
-  clicks?: string;
-  inline_link_clicks?: string;
-  actions?: MetaAction[];
-  action_values?: MetaAction[];
-  video_play_actions?: MetaAction[];
-  video_avg_time_watched_actions?: MetaAction[];
-  video_p25_watched_actions?: MetaAction[];
-  video_p50_watched_actions?: MetaAction[];
-  video_p75_watched_actions?: MetaAction[];
-  video_p95_watched_actions?: MetaAction[];
-  video_p100_watched_actions?: MetaAction[];
-  video_thruplay_watched_actions?: MetaAction[];
-  account_currency?: string;
-  cpm?: string;
-  ctr?: string;
-  inline_link_click_ctr?: string;
-};
-
-type MetaListResponse<T> = {
-  data?: T[];
-  paging?: {
-    next?: string;
-  };
-  error?: {
-    message?: string;
-  };
-};
-
-function getActionExact(actions: MetaAction[] | undefined, ...types: string[]): number {
-  if (!actions) return 0;
-  for (const type of types) {
-    const found = actions.find((a) => a.action_type === type);
-    if (found) return parseInt(String(found.value || "0"), 10);
+  if (cached.expiresAt <= Date.now()) {
+    adsPerformanceCache.delete(key);
+    return null;
   }
-  return 0;
+
+  return cached.value;
 }
 
-function getSaneActionExact(
-  actions: MetaAction[] | undefined,
-  maxReasonable: number,
-  ...types: string[]
-): number {
-  const value = getActionExact(actions, ...types);
-  return maxReasonable > 0 && value > maxReasonable ? 0 : value;
-}
-
-function getAnyActionValue(actions: MetaAction[] | undefined): number {
-  if (!actions?.length) return 0;
-  return Math.max(
-    ...actions.map((action) => {
-      const value = parseFloat(String(action.value || "0"));
-      return Number.isFinite(value) ? value : 0;
-    }),
-    0
-  );
-}
-
-function sumActions(actions: MetaAction[] | undefined, ...types: string[]): number {
-  if (!actions) return 0;
-  let total = 0;
-  for (const type of types) {
-    const found = actions.find((a) => a.action_type === type);
-    if (found) total += parseInt(String(found.value || "0"), 10);
-  }
-  return total;
-}
-
-// REPLACE the entire getLeadCount function with this:
-function getLeadCount(actions: MetaAction[] | undefined): number {
-  if (!actions) return 0;
-
-  // "lead" is Meta's deduplicated top-level count — source of truth at account level
-  const topLevelLead = getActionExact(actions, "lead");
-  const leadGrouped = getActionExact(actions, "onsite_conversion.lead_grouped", "leadgen_grouped");
-  const registrationLeads = getActionExact(actions, "offsite_complete_registration_add_meta_leads");
-
-  const best = Math.max(topLevelLead, leadGrouped, registrationLeads);
-  if (best > 0) return best;
-
-  return sumActions(
-    actions,
-    "onsite_conversion.lead",
-    "offsite_conversion.fb_pixel_lead",
-    "onsite_conversion.messaging_lead",
-    "omni_lead"
-  );
-}
-
-function buildInsight(ins: MetaInsight | undefined): AdInsight {
-  const spend = parseFloat(ins?.spend || "0");
-  const impressions = parseInt(ins?.impressions || "0", 10);
-  const clicks = parseInt(ins?.clicks || "0", 10);
-  const reach = parseInt(ins?.reach || "0", 10);
-  const leads = getLeadCount(ins?.actions);
-  const landingPageViews = getActionExact(ins?.actions, "landing_page_view");
-  const postEngagements = getActionExact(ins?.actions, "post_engagement");
-  const maxActionCount = Math.max(impressions, reach);
-
-  const likes = getSaneActionExact(
-    ins?.actions,
-    maxActionCount,
-    "post_reaction"
-  );
-
-  const comments = getSaneActionExact(
-    ins?.actions,
-    maxActionCount,
-    "onsite_conversion.post_net_comment",
-    "comment",
-    "post_comment"
-  );
-
-  const shares = getSaneActionExact(
-    ins?.actions,
-    maxActionCount,
-    "post",
-    "share",
-    "post_share"
-  );
-
-  const videoViews = Math.max(
-    getActionExact(
-      ins?.actions,
-      "video_view",
-      "video_play",
-      "video_watched"
-    ),
-    Math.round(getAnyActionValue(ins?.video_play_actions))
-  );
-
-  const videoP25 = Math.round(getAnyActionValue(ins?.video_p25_watched_actions));
-  const videoP50 = Math.round(getAnyActionValue(ins?.video_p50_watched_actions));
-  const videoP75 = Math.round(getAnyActionValue(ins?.video_p75_watched_actions));
-  const videoP95 = Math.round(getAnyActionValue(ins?.video_p95_watched_actions));
-  const videoP100 = Math.round(getAnyActionValue(ins?.video_p100_watched_actions));
-  const thruPlays = Math.round(getAnyActionValue(ins?.video_thruplay_watched_actions));
-
-  const rawAvgWatchTime = getAnyActionValue(ins?.video_avg_time_watched_actions);
-  const normalizedAvgWatchTime =
-    rawAvgWatchTime > 600 ? rawAvgWatchTime / 1000 : rawAvgWatchTime;
-  const videoAvgWatchTime =
-    normalizedAvgWatchTime > 0 ? parseFloat(normalizedAvgWatchTime.toFixed(1)) : null;
-  const hookRate =
-    impressions > 0 && videoViews > 0
-      ? parseFloat(((videoViews / impressions) * 100).toFixed(2))
-      : 0;
-  const skipRate =
-    impressions > 0 && videoViews > 0
-      ? parseFloat(Math.max(0, 100 - hookRate).toFixed(2))
-      : 0;
-  const holdRate50 =
-    videoViews > 0 && videoP50 > 0
-      ? parseFloat(((videoP50 / videoViews) * 100).toFixed(2))
-      : 0;
-  const completionRate =
-    videoViews > 0 && Math.max(videoP95, videoP100) > 0
-      ? parseFloat(((Math.max(videoP95, videoP100) / videoViews) * 100).toFixed(2))
-      : 0;
-
-  const purchaseValue = sumActions(
-    ins?.action_values,
-    "offsite_conversion.fb_pixel_purchase",
-    "onsite_conversion.purchase",
-    "purchase"
-  );
-
-  const cpm =
-    ins?.cpm != null ? parseFloat(ins.cpm) : impressions > 0 ? (spend / impressions) * 1000 : 0;
-  const ctr =
-    ins?.ctr != null
-      ? parseFloat(ins.ctr)
-      : impressions > 0
-        ? (clicks / impressions) * 100
-        : 0;
-  const cpc = clicks > 0 ? spend / clicks : 0;
-  const cpl = leads > 0 ? spend / leads : 0;
-  const roas = spend > 0 ? purchaseValue / spend : 0;
-
-  return {
-    spend,
-    reach,
-    impressions,
-    clicks,
-    cpm,
-    ctr,
-    cpc,
-    likes,
-    comments,
-    shares,
-    videoViews,
-    hookRate,
-    skipRate,
-    videoAvgWatchTime,
-    videoP25,
-    videoP50,
-    videoP75,
-    videoP95,
-    videoP100,
-    thruPlays,
-    holdRate50,
-    completionRate,
-    leads,
-    cpl,
-    roas,
-    landingPageViews,
-    postEngagements,
-    currency: ins?.account_currency || "INR",
-  };
-}
-
-function buildInsightsParams(
-  fields: string,
-  from: string,
-  to: string,
-  token: string,
-  level: "account" | "ad"
-) {
-  return new URLSearchParams({
-    fields,
-    time_range: JSON.stringify({ since: from, until: to }),
-    level,
-    limit: level === "account" ? "1" : "500",
-    use_account_attribution_setting: "true",
-    access_token: token,
+function setCachedAdsPerformance(key: string, value: AdsPerformanceSnapshot) {
+  adsPerformanceCache.set(key, {
+    expiresAt: Date.now() + ADS_PERFORMANCE_CACHE_TTL_MS,
+    value,
   });
 }
 
-function didAdRunInPeriod(ad: Ad) {
-  return (
-    ad.insights.impressions > 0 ||
-    ad.insights.spend > 0 ||
-    ad.insights.reach > 0 ||
-    ad.insights.clicks > 0
-  );
+function buildEmptySnapshot(token = ""): AdsPerformanceSnapshot {
+  return {
+    ads: [],
+    campaigns: [],
+    accountInsight: null,
+    token,
+  };
+}
+
+function normalizeSnapshot(data: AdsPerformanceResponse): AdsPerformanceSnapshot {
+  return {
+    ads: Array.isArray(data.ads) ? data.ads : [],
+    campaigns: Array.isArray(data.campaigns) ? data.campaigns : [],
+    accountInsight: data.accountInsight || null,
+    token: typeof data.token === "string" ? data.token : "",
+  };
 }
 
 export function useAdsPerformance(
@@ -374,227 +143,58 @@ export function useAdsPerformance(
   const [accountInsight, setAccountInsight] = useState<AdInsight | null>(null);
   const [token, setToken] = useState("");
 
-  const fetchAllPages = useCallback(async <T,>(initialUrl: string, maxItems = 10000) => {
-    const items: T[] = [];
-    let nextUrl: string | null = initialUrl;
-
-    while (nextUrl && items.length < maxItems) {
-      const res: Response = await fetch(nextUrl);
-      const data = (await res.json()) as MetaListResponse<T>;
-
-      if (data.error) {
-        throw new Error(data.error.message || "Meta API request failed");
-      }
-
-      if (Array.isArray(data.data)) {
-        items.push(...data.data);
-      }
-
-      nextUrl = data.paging?.next || null;
-    }
-
-    return items;
+  const applySnapshot = useCallback((snapshot: AdsPerformanceSnapshot) => {
+    setAds(snapshot.ads);
+    setCampaigns(snapshot.campaigns);
+    setAccountInsight(snapshot.accountInsight);
+    setToken(snapshot.token);
   }, []);
 
   const fetchPerformance = useCallback(async () => {
-    if (!client || !from || !to) return;
+    if (!client || !from || !to) {
+      applySnapshot(buildEmptySnapshot());
+      setLoading(false);
+      return;
+    }
+
+    const cacheKey = `${client}|${from}|${to}`;
+    const cached = getCachedAdsPerformance(cacheKey);
+    if (cached) {
+      applySnapshot(cached);
+      setError("");
+      setLoading(false);
+      return;
+    }
 
     setLoading(true);
     setError("");
 
     try {
-      const cfgRes = await fetch(`/api/ads?client=${client}`);
-      const cfg = await cfgRes.json();
-
-      if (!cfg.token || !cfg.adAccountId) {
-        throw new Error("Invalid client Meta Ads config");
-      }
-
-      setToken(cfg.token);
-      console.log("[bludash] querying date range:", { from, to });
-
-      const rawCampaigns = await fetchAllPages<MetaCampaign>(
-        `${BASE}/${cfg.adAccountId}/campaigns?fields=id,name,objective,status,effective_status&limit=200&access_token=${cfg.token}`
-      );
-
-      const rawAdSets = await fetchAllPages<MetaAdSet>(
-        `${BASE}/${cfg.adAccountId}/adsets?fields=id,name,status,campaign_id,daily_budget,lifetime_budget,effective_status&limit=200&access_token=${cfg.token}`
-      );
-
-      const rawAds = await fetchAllPages<MetaAd>(
-        `${BASE}/${cfg.adAccountId}/ads?fields=id,name,status,campaign_id,adset_id,creative{thumbnail_url,image_url,video_id},effective_status&limit=500&access_token=${cfg.token}`
-      );
-
-      const baseInsightFields =
-        "spend,reach,impressions,clicks,actions,action_values,account_currency,cpm,ctr";
-      const videoInsightFields =
-        "video_play_actions,video_avg_time_watched_actions,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p95_watched_actions,video_p100_watched_actions,video_thruplay_watched_actions";
-      const baseAdInsightFields =
-        `ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,${baseInsightFields}`;
-      const enhancedAdInsightFields =
-        `${baseAdInsightFields},${videoInsightFields}`;
-
-      // REPLACE the account insight fetch block:
-let accountInsightData: AdInsight | null = null;
-try {
-  const url = `${BASE}/${cfg.adAccountId}/insights?fields=spend,reach,impressions,clicks,actions,action_values,account_currency,cpm,ctr&time_range=${encodeURIComponent(JSON.stringify({ since: from, until: to }))}&level=account&use_account_attribution_setting=true&access_token=${cfg.token}`;
-  const res = await fetch(url);
-  const json = await res.json();
-console.log("[bludash] account actions:", JSON.stringify(json.data?.[0]?.actions, null, 2));
-  if (json.error) throw new Error(json.error.message);
-  if (Array.isArray(json.data) && json.data[0]) {
-    accountInsightData = buildInsight(json.data[0]);
-    console.log("[bludash] account leads parsed:", accountInsightData.leads);
-  } else {
-    console.warn("[bludash] account insight returned empty data");
-  }
-} catch (e) {
-  console.error("[bludash] account insight fetch failed:", e);
-}
-
-
-      let allInsights: MetaInsight[];
-      try {
-        allInsights = await fetchAllPages<MetaInsight>(
-          `${BASE}/${cfg.adAccountId}/insights?${buildInsightsParams(
-            enhancedAdInsightFields,
-            from,
-            to,
-            cfg.token,
-            "ad"
-          ).toString()}`
-        );
-      } catch (e) {
-        console.warn("[bludash] enhanced video insight fields failed, retrying base fields:", e);
-        allInsights = await fetchAllPages<MetaInsight>(
-          `${BASE}/${cfg.adAccountId}/insights?${buildInsightsParams(
-            baseAdInsightFields,
-            from,
-            to,
-            cfg.token,
-            "ad"
-          ).toString()}`
-        );
-      }
-
-      const periodInsights = allInsights.filter(
-        (ins): ins is MetaInsight & { ad_id: string } => Boolean(ins.ad_id)
-      );
-
-      const campMap: Record<string, MetaCampaign> = {};
-      for (const c of rawCampaigns) {
-        campMap[c.id] = c;
-      }
-
-      const adSetMap: Record<string, MetaAdSet> = {};
-      for (const s of rawAdSets) {
-        adSetMap[s.id] = s;
-      }
-
-      const adMap: Record<string, MetaAd> = {};
-      for (const ad of rawAds) {
-        adMap[ad.id] = ad;
-      }
-
-      const builtAds: Ad[] = periodInsights.map((ins) => {
-        const ad = adMap[ins.ad_id] || {};
-        const campaignId = ad.campaign_id || ins.campaign_id || "";
-        const adSetId = ad.adset_id || ins.adset_id || "";
-        const camp = campMap[campaignId] || {};
-        const adSet = adSetMap[adSetId] || {};
-        const creative = ad.creative || {};
-
-        const thumbnail = creative.image_url || creative.thumbnail_url || null;
-        const videoId = creative.video_id || null;
-        const isVideo = !!videoId;
-
-        const insight = buildInsight(ins);
-
-        return {
-          id: ins.ad_id,
-          name: ad.name || ins.ad_name || "Unknown Ad",
-          status: ad.effective_status || ad.status || "UNKNOWN",
-          adSetId,
-          adSetName: adSet.name || ins.adset_name || "Unknown Ad Set",
-          campaignId,
-          campaignName: camp.name || ins.campaign_name || "Unknown Campaign",
-          campaignObjective: camp.objective || "",
-          dailyBudget: adSet.daily_budget ? Number(adSet.daily_budget) / 100 : null,
-          lifetimeBudget: adSet.lifetime_budget ? Number(adSet.lifetime_budget) / 100 : null,
-          thumbnail,
-          videoId,
-          isVideo,
-          insights: insight,
-        };
+      const params = new URLSearchParams({
+        client,
+        from,
+        to,
+        snapshot: "1",
       });
+      const res = await fetch(`/api/ads?${params.toString()}`, {
+        cache: "no-store",
+      });
+      const data = (await res.json()) as AdsPerformanceResponse;
 
-      const adsWithData = builtAds.filter(
-        (ad) => didAdRunInPeriod(ad) || ad.insights.leads > 0
-      );
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to fetch ads performance");
+      }
 
-      const insightCampaignIds = new Set(adsWithData.map((ad) => ad.campaignId));
-      const campaignSource: MetaCampaign[] = [
-        ...rawCampaigns,
-        ...adsWithData
-          .filter((ad) => ad.campaignId && !campMap[ad.campaignId])
-          .map((ad) => ({
-            id: ad.campaignId,
-            name: ad.campaignName,
-            objective: ad.campaignObjective,
-            status: "UNKNOWN",
-          })),
-      ].filter((campaign) => insightCampaignIds.has(campaign.id));
-
-      const groupedCampaigns: Campaign[] = campaignSource
-        .map((campaign) => ({
-          id: campaign.id,
-          name: campaign.name,
-          objective: campaign.objective || "",
-          status: campaign.effective_status || campaign.status || "UNKNOWN",
-          adSets: [
-            ...rawAdSets.filter((adSet) => adSet.campaign_id === campaign.id),
-            ...adsWithData
-              .filter((ad) => ad.campaignId === campaign.id && ad.adSetId && !adSetMap[ad.adSetId])
-              .map((ad) => ({
-                id: ad.adSetId,
-                name: ad.adSetName,
-                status: "UNKNOWN",
-                effective_status: "UNKNOWN",
-                campaign_id: campaign.id,
-                daily_budget: null,
-                lifetime_budget: null,
-              })),
-          ]
-            .filter(
-              (adSet, index, source) =>
-                adSet.id && source.findIndex((item) => item.id === adSet.id) === index
-            )
-            .map((adSet) => ({
-              id: adSet.id,
-              name: adSet.name,
-              status: adSet.effective_status || adSet.status || "UNKNOWN",
-              dailyBudget: adSet.daily_budget ? Number(adSet.daily_budget) / 100 : null,
-              lifetimeBudget: adSet.lifetime_budget
-                ? Number(adSet.lifetime_budget) / 100
-                : null,
-              ads: adsWithData.filter((ad) => ad.adSetId === adSet.id),
-            }))
-            .filter((adSet) => adSet.ads.length > 0),
-        }))
-        .filter((campaign) => campaign.adSets.length > 0);
-
-      setAds(adsWithData);
-      setCampaigns(groupedCampaigns);
-setAccountInsight(accountInsightData);
+      const snapshot = normalizeSnapshot(data);
+      setCachedAdsPerformance(cacheKey, snapshot);
+      applySnapshot(snapshot);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to fetch ads performance");
-      setAds([]);
-      setCampaigns([]);
-      setAccountInsight(null);
+      applySnapshot(buildEmptySnapshot());
     } finally {
       setLoading(false);
     }
-  }, [client, fetchAllPages, from, to]);
+  }, [applySnapshot, client, from, to]);
 
   useEffect(() => {
     const timer = setTimeout(() => {

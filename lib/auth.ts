@@ -5,21 +5,25 @@ export const CLIENTS = {
     name: "ABAD Builders",
     clientKey: "ABADBuilders",
   },
-  angelLungies123: {
-    password: "angelLungies@123",
+  angelhomes123: {
+    password: "angelhomes@123",
+    name: "Angel Homes",
+    clientKey: "AngelHomes",
+  },
+  angellungies123: {
+    password: "angellungies@123",
     name: "Angel Lungies",
     clientKey: "AngelLungies",
   },
-
-  bluFunnel_CRM123: {
-    password: "bluFunnel_CRM@123",
-    name: "BluFunnel CRM",
-    clientKey: "BluFunnel_CRM",
+  benjiesallday123: {
+    password: "benjiesallday@123",
+    name: "Benjiesallday",
+    clientKey: "Benjiesallday",
   },
-  blusteakAcademy123: {
-    password: "blusteakAcademy@123",
-    name: "Blusteak Academy",
-    clientKey: "Blusteak_Academy",
+  blucampus123: {
+    password: "blucampus@123",
+    name: "BluCampus",
+    clientKey: "BluCampus",
   },
 
   blusteakMedia123: {
@@ -38,10 +42,15 @@ export const CLIENTS = {
     name: "Chakolas",
     clientKey: "CHAKOLAS",
   },
-  cnc123: {
-    password: "cnc@123",
-    name: "CnC",
-    clientKey: "CnC",
+  Care_n_Cure_Pharmacy123: {
+    password: "Care_n_Cure_Pharmacy@123",
+    name: "Care n Cure Pharmacy",
+    clientKey: "Care_n_Cure_Pharmacy",
+  },
+  Ekabrahmaa123: {
+    password: "ekabrahmaa@123",
+    name: "Ekabrahmaa",
+    clientKey: "Ekabrahmaa",
   },
   geojit123: {
     password: "geojit@123",
@@ -87,12 +96,14 @@ export const ALL_CLIENTS = [
   
   
   { label: "ABAD Builders", value: "ABADBuilders" },
+  { label: "Angel Homes", value: "AngelHomes" },
   { label: "Angel Lungies", value: "AngelLungies" },
-  { label: "BluFunnel CRM", value: "BluFunnel_CRM" },
-  { label: "Blusteak Academy", value: "Blusteak_Academy" },
+  { label: "Benjiesallday", value: "Benjiesallday" },
+  { label: "BluCampus", value: "BluCampus" },
   { label: "Blusteak Media", value: "Blusteak_Media" },
+  { label: "Care n Cure Pharmacy", value: "Care_n_Cure_Pharmacy" },
   { label: "Chakolas", value: "CHAKOLAS" },
-  { label: "CnC", value: "CnC" },
+  { label: "Ekabrahmaa", value: "Ekabrahmaa" },
   { label: "Geojit", value: "GEOJIT" },
   { label: "Halwa Haweli", value: "HALWAHAWELI" },
   { label: "Incheon Kia", value: "IncheonKia" },

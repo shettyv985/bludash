@@ -15,9 +15,9 @@ export default function ManusReportToast({ state, onDismiss, dark }: Props) {
   if (status === "idle") return null;
 
   const statusLabel: Record<string, string> = {
-    creating: "Submitting to Manus…",
-    running: "Manus is analyzing your ads…",
-    waiting: "Manus is waiting for input…",
+    creating: "Submitting to GPT-5.5...",
+    running: "GPT-5.5 is analyzing...",
+    waiting: "GPT-5.5 is waiting...",
     done: "Analysis complete…",
     building: "Building HTML report…",
     error: "Something went wrong",
