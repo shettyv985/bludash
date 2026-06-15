@@ -1315,7 +1315,7 @@ export default function PerformanceReport({ client, from, to, dark, onBack }: Pr
     ads: comparisonAds,
     accountInsight: comparisonAccountInsight,
   } =
-    useAdsPerformance(client, comparisonRange.from, comparisonRange.to);
+    useAdsPerformance(client, comparisonRange.from, comparisonRange.to, !loading);
 
 
 

@@ -5,6 +5,7 @@ import {
 } from "@/lib/boostedPostMatch";
 
 const BASE = "https://graph.facebook.com/v25.0";
+const META_FETCH_TIMEOUT_MS = 60000;
 const AD_INSIGHT_FIELDS =
   "ad_id,ad_name,spend,reach,impressions,clicks,cpm,ctr,actions,account_currency";
 
@@ -110,18 +111,25 @@ type AdsConfig = {
 };
 
 async function fetchJSON<T>(url: string): Promise<T> {
-  const res = await fetch(url, { cache: "no-store" });
-  const data = (await res.json()) as T & MetaErrorResponse;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), META_FETCH_TIMEOUT_MS);
 
-  if (data?.error) {
-    throw new Error(data.error.message || "Meta API request failed");
+  try {
+    const res = await fetch(url, { cache: "no-store", signal: controller.signal });
+    const data = (await res.json()) as T & MetaErrorResponse;
+
+    if (data?.error) {
+      throw new Error(data.error.message || "Meta API request failed");
+    }
+
+    if (!res.ok) {
+      throw new Error(`Meta API request failed (${res.status})`);
+    }
+
+    return data as T;
+  } finally {
+    clearTimeout(timeout);
   }
-
-  if (!res.ok) {
-    throw new Error(`Meta API request failed (${res.status})`);
-  }
-
-  return data as T;
 }
 
 async function fetchAllPages<T>(initialUrl: string, maxItems = 10000) {
@@ -260,28 +268,10 @@ export async function fetchBoostedPosts(
   if (paidInsights.length === 0) return {};
 
   const map: Record<string, BoostedPost> = {};
-  const paidAdIds = new Set(
-    paidInsights.map((ins) => ins.ad_id).filter((id): id is string => Boolean(id))
-  );
-  const adsById: Record<string, BoostedAd> = {};
 
-  try {
-    const rawAds = await fetchAllPages<BoostedAd>(
-      `${BASE}/${config.adAccountId}/ads?fields=id,name,status,effective_status,creative{body,object_story_id,effective_object_story_id,effective_instagram_story_id,source_instagram_media_id,instagram_permalink_url,object_story_spec{page_id,instagram_actor_id,instagram_user_id,link_data{message},photo_data{caption},video_data{message}}}&limit=500&access_token=${config.token}`
-    );
-
-    for (const ad of rawAds) {
-      if (ad?.id && paidAdIds.has(ad.id)) {
-        adsById[ad.id] = ad;
-      }
-    }
-  } catch {
-    // Missing ads are fetched per ad below.
-  }
-
-  for (const ins of paidInsights) {
+  await Promise.all(paidInsights.map(async (ins) => {
     try {
-      const ad = adsById[ins.ad_id!] || (await fetchAdCreative(ins.ad_id!, config.token));
+      const ad = await fetchAdCreative(ins.ad_id!, config.token);
       const objectStoryId =
         ad.creative?.object_story_id ||
         ad.creative?.effective_object_story_id ||
@@ -352,7 +342,7 @@ export async function fetchBoostedPosts(
     } catch {
       // Ignore a single ad failure and continue the digest.
     }
-  }
+  }));
 
   return map;
 }

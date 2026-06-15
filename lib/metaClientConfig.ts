@@ -25,12 +25,15 @@ const CLIENT_NAMES: Record<string, string> = {
   Care_n_Cure_Pharmacy: "Care n Cure Pharmacy",
   Ekabrahmaa: "Ekabrahmaa",
   GEOJIT: "GEOJIT",
+  Heal_in_Kerala: "Heal in Kerala",
   HALWAHAWELI: "HALWA HAWELI",
   IncheonKia: "Incheon Kia",
   Kendamil_Qatar: "Kendamil Qatar",
+  Kulud: "Kulud",
   MemoryTrain: "Memory Train",
+  Mothers_Food: "Mothers Food",
   SpacesECO_Clean: "Spaces ECO Clean",
-  Zeiq: "Zeiq Consultants",
+  
   
 };
 
@@ -45,12 +48,14 @@ const ENV_PREFIXES = [
   "Care_n_Cure_Pharmacy",
   "Ekabrahmaa",
   "GEOJIT",
+  "Heal_in_Kerala",
   "HALWAHAWELI",
   "IncheonKia",
   "Kendamil_Qatar",
+  "Kulud",
   "MemoryTrain",
+  "Mothers_Food",
   "SpacesECO_Clean",
-  "Zeiq",
 ] as const;
 
 export type MetaClientKey = (typeof ENV_PREFIXES)[number];

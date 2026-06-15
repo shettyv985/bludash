@@ -32,11 +32,26 @@ type BoostedPostsCacheEntry = {
 
 const BASE = "https://graph.facebook.com/v25.0";
 const BOOSTED_POSTS_CACHE_TTL_MS = 5 * 60 * 1000;
+const META_FETCH_TIMEOUT_MS = 60000;
 const AD_INSIGHT_FIELDS =
   "ad_id,ad_name,spend,reach,impressions,clicks,cpm,ctr,actions,account_currency";
 
 const boostedPostsCache = new Map<string, BoostedPostsCacheEntry>();
 const boostedPostsInFlight = new Map<string, Promise<Record<string, BoostedPost>>>();
+
+async function fetchWithTimeout(url: string, init?: RequestInit, timeoutMs = META_FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    });
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
 
 function getCachedBoostedPosts(key: string) {
   const cached = boostedPostsCache.get(key);
@@ -135,6 +150,39 @@ type AdsConfigResponse = {
   adAccountId?: string;
 };
 
+const ADS_CONFIG_CACHE_TTL_MS = 5 * 60 * 1000;
+const adsConfigCache = new Map<
+  string,
+  { expiresAt: number; value: AdsConfigResponse }
+>();
+const adsConfigInFlight = new Map<string, Promise<AdsConfigResponse>>();
+
+async function getAdsConfig(client: string): Promise<AdsConfigResponse> {
+  const cached = adsConfigCache.get(client);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  if (cached) adsConfigCache.delete(client);
+
+  const pending = adsConfigInFlight.get(client);
+  if (pending) return pending;
+
+  const params = new URLSearchParams({ client });
+  const request = fetch(`/api/ads?${params.toString()}`)
+    .then((res) => res.json() as Promise<AdsConfigResponse>)
+    .then((cfg) => {
+      adsConfigCache.set(client, {
+        expiresAt: Date.now() + ADS_CONFIG_CACHE_TTL_MS,
+        value: cfg,
+      });
+      return cfg;
+    })
+    .finally(() => {
+      adsConfigInFlight.delete(client);
+    });
+
+  adsConfigInFlight.set(client, request);
+  return request;
+}
+
 function getActionExact(actions: MetaAction[] | undefined, types: string[]): number {
   if (!Array.isArray(actions)) return 0;
   for (const type of types) {
@@ -212,7 +260,7 @@ async function fetchStoryCaption(
       : "message,story,description";
 
   try {
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       `${BASE}/${storyId}?fields=${fields}&access_token=${token}`
     );
     const data = (await res.json()) as MetaStoryResponse;
@@ -230,7 +278,7 @@ async function fetchStoryCaption(
 }
 
 async function fetchAdCreative(adId: string, token: string): Promise<BoostedAd> {
-  const res = await fetch(
+  const res = await fetchWithTimeout(
     `${BASE}/${adId}?fields=id,name,status,effective_status,creative{body,object_story_id,effective_object_story_id,effective_instagram_story_id,source_instagram_media_id,instagram_permalink_url,object_story_spec{page_id,instagram_actor_id,instagram_user_id,link_data{message},photo_data{caption},video_data{message}}}&access_token=${token}`
   );
   const data = (await res.json()) as BoostedAd & MetaErrorResponse;
@@ -238,7 +286,7 @@ async function fetchAdCreative(adId: string, token: string): Promise<BoostedAd> 
   return data;
 }
 
-export function useBoostedPosts(client: string, from: string, to: string) {
+export function useBoostedPosts(client: string, from: string, to: string, enabled = true) {
   const [boostedMap, setBoostedMap] = useState<Record<string, BoostedPost>>({});
   const [loading, setLoading] = useState(true);
 
@@ -247,7 +295,7 @@ export function useBoostedPosts(client: string, from: string, to: string) {
     let nextUrl: string | null = initialUrl;
 
     while (nextUrl && items.length < maxItems) {
-      const res: Response = await fetch(nextUrl);
+      const res: Response = await fetchWithTimeout(nextUrl);
       const data = (await res.json()) as MetaListResponse<T>;
 
       if (data.error) {
@@ -265,10 +313,12 @@ export function useBoostedPosts(client: string, from: string, to: string) {
   }, []);
 
   const loadBoostedPosts = useCallback(async (): Promise<Record<string, BoostedPost>> => {
-      const cfgRes = await fetch(`/api/ads?client=${client}&optional=1`);
-      const cfg = (await cfgRes.json()) as AdsConfigResponse;
+      const cfg = await getAdsConfig(client);
 
-      if (!cfg.token || !cfg.adAccountId) {
+      const token = cfg.token;
+      const adAccountId = cfg.adAccountId;
+
+      if (!token || !adAccountId) {
         return {};
       }
 
@@ -279,11 +329,11 @@ export function useBoostedPosts(client: string, from: string, to: string) {
 
       try {
         insights = await fetchAllPages<AdInsight>(
-          `${BASE}/${cfg.adAccountId}/insights?level=ad&fields=${AD_INSIGHT_FIELDS}&breakdowns=publisher_platform&time_range=${timeRange}&limit=500&access_token=${cfg.token}`
+          `${BASE}/${adAccountId}/insights?level=ad&fields=${AD_INSIGHT_FIELDS}&breakdowns=publisher_platform&time_range=${timeRange}&limit=500&access_token=${token}`
         );
       } catch {
         insights = await fetchAllPages<AdInsight>(
-          `${BASE}/${cfg.adAccountId}/insights?level=ad&fields=${AD_INSIGHT_FIELDS}&time_range=${timeRange}&limit=500&access_token=${cfg.token}`
+          `${BASE}/${adAccountId}/insights?level=ad&fields=${AD_INSIGHT_FIELDS}&time_range=${timeRange}&limit=500&access_token=${token}`
         );
       }
 
@@ -300,28 +350,10 @@ export function useBoostedPosts(client: string, from: string, to: string) {
       }
 
       const map: Record<string, BoostedPost> = {};
-      const paidAdIds = new Set(
-        paidInsights.map((ins) => ins.ad_id).filter((id): id is string => Boolean(id))
-      );
-      const adsById: Record<string, BoostedAd> = {};
 
-      try {
-        const rawAds = await fetchAllPages<BoostedAd>(
-          `${BASE}/${cfg.adAccountId}/ads?fields=id,name,status,effective_status,creative{body,object_story_id,effective_object_story_id,effective_instagram_story_id,source_instagram_media_id,instagram_permalink_url,object_story_spec{page_id,instagram_actor_id,instagram_user_id,link_data{message},photo_data{caption},video_data{message}}}&limit=500&access_token=${cfg.token}`
-        );
-
-        for (const ad of rawAds) {
-          if (ad?.id && paidAdIds.has(ad.id)) {
-            adsById[ad.id] = ad;
-          }
-        }
-      } catch {
-        // Fall back to per-ad lookups below only for ads missing from the account list.
-      }
-
-      for (const ins of paidInsights) {
+      await Promise.all(paidInsights.map(async (ins) => {
         try {
-          const ad = adsById[ins.ad_id!] || await fetchAdCreative(ins.ad_id!, cfg.token);
+          const ad = await fetchAdCreative(ins.ad_id!, token);
 
           const objectStoryId =
             ad.creative?.object_story_id ||
@@ -346,7 +378,7 @@ export function useBoostedPosts(client: string, from: string, to: string) {
             : await fetchStoryCaption(
               instagramStoryId || sourceInstagramMediaId || objectStoryId,
               platform,
-              cfg.token
+              token
             );
 
           const body = creativeCaption || storyCaption || "";
@@ -402,13 +434,13 @@ export function useBoostedPosts(client: string, from: string, to: string) {
         } catch {
           // Ignore single-ad failures
         }
-      }
+      }));
 
       return map;
   }, [client, fetchAllPages, from, to]);
 
   const fetchBoosted = useCallback(async () => {
-    if (!client || !from || !to) {
+    if (!enabled || !client || !from || !to) {
       setBoostedMap({});
       setLoading(false);
       return;
@@ -429,7 +461,9 @@ export function useBoostedPosts(client: string, from: string, to: string) {
       if (!pending) {
         pending = loadBoostedPosts()
           .then((map) => {
-            setCachedBoostedPosts(cacheKey, map);
+            if (Object.keys(map).length > 0) {
+              setCachedBoostedPosts(cacheKey, map);
+            }
             return map;
           })
           .finally(() => {
@@ -440,11 +474,11 @@ export function useBoostedPosts(client: string, from: string, to: string) {
 
       setBoostedMap(await pending);
     } catch {
-      setBoostedMap({});
+      // Keep the last successful paid overlay. A slow Meta refresh should not blank boosted data.
     } finally {
       setLoading(false);
     }
-  }, [client, from, loadBoostedPosts, to]);
+  }, [client, enabled, from, loadBoostedPosts, to]);
 
   useEffect(() => {
     const timer = setTimeout(() => {

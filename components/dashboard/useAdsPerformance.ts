@@ -93,6 +93,7 @@ type AdsPerformanceResponse = Partial<AdsPerformanceSnapshot> & {
 
 const ADS_PERFORMANCE_CACHE_TTL_MS = 5 * 60 * 1000;
 const adsPerformanceCache = new Map<string, AdsPerformanceCacheEntry>();
+const adsPerformanceInFlight = new Map<string, Promise<AdsPerformanceSnapshot>>();
 
 function getCachedAdsPerformance(key: string) {
   const cached = adsPerformanceCache.get(key);
@@ -134,7 +135,8 @@ function normalizeSnapshot(data: AdsPerformanceResponse): AdsPerformanceSnapshot
 export function useAdsPerformance(
   client: string,
   from: string,
-  to: string
+  to: string,
+  enabled = true
 ): UseAdsPerformanceResult {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -151,7 +153,7 @@ export function useAdsPerformance(
   }, []);
 
   const fetchPerformance = useCallback(async () => {
-    if (!client || !from || !to) {
+    if (!enabled || !client || !from || !to) {
       applySnapshot(buildEmptySnapshot());
       setLoading(false);
       return;
@@ -170,31 +172,41 @@ export function useAdsPerformance(
     setError("");
 
     try {
-      const params = new URLSearchParams({
-        client,
-        from,
-        to,
-        snapshot: "1",
-      });
-      const res = await fetch(`/api/ads?${params.toString()}`, {
-        cache: "no-store",
-      });
-      const data = (await res.json()) as AdsPerformanceResponse;
+      let pending = adsPerformanceInFlight.get(cacheKey);
+      if (!pending) {
+        pending = (async () => {
+          const params = new URLSearchParams({
+            client,
+            from,
+            to,
+            snapshot: "1",
+          });
+          const res = await fetch(`/api/ads?${params.toString()}`, {
+            cache: "no-store",
+          });
+          const data = (await res.json()) as AdsPerformanceResponse;
 
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to fetch ads performance");
+          if (!res.ok) {
+            throw new Error(data.error || "Failed to fetch ads performance");
+          }
+
+          const snapshot = normalizeSnapshot(data);
+          setCachedAdsPerformance(cacheKey, snapshot);
+          return snapshot;
+        })().finally(() => {
+          adsPerformanceInFlight.delete(cacheKey);
+        });
+        adsPerformanceInFlight.set(cacheKey, pending);
       }
 
-      const snapshot = normalizeSnapshot(data);
-      setCachedAdsPerformance(cacheKey, snapshot);
-      applySnapshot(snapshot);
+      applySnapshot(await pending);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to fetch ads performance");
       applySnapshot(buildEmptySnapshot());
     } finally {
       setLoading(false);
     }
-  }, [applySnapshot, client, from, to]);
+  }, [applySnapshot, client, enabled, from, to]);
 
   useEffect(() => {
     const timer = setTimeout(() => {

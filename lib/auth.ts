@@ -57,6 +57,11 @@ export const CLIENTS = {
     name: "Geojit",
     clientKey: "GEOJIT",
   },
+  healinkerala123: {
+    password: "healinkerala@123",
+    name: "Heal in Kerala",
+    clientKey: "Heal_in_Kerala",
+  },
   halwahaweli123: {
     password: "halwahaweli@123",
     name: "Halwa Haweli",
@@ -72,21 +77,27 @@ export const CLIENTS = {
     name: "Kendamil Qatar",
     clientKey: "Kendamil_Qatar",
   },
+  kulud123: {
+    password: "kulud@123",
+    name: "Kulud",
+    clientKey: "ALL",
+  },
   memoryTrain123: {
     password: "memoryTrain@123",
     name: "Memory Train",
     clientKey: "MemoryTrain",
+  },
+  mothersfood123: {
+    password: "mothersfood@123",
+    name: "Mothers Food",
+    clientKey: "Mothers_Food",
   },
   spacesECO_Clean123: {
     password: "spacesECO_Clean@123",
     name: "Spaces ECO Clean",
     clientKey: "SpacesECO_Clean",
   },
-  zeiq123: {
-    password: "zeiq@123",
-    name: "Zeiq",
-    clientKey: "Zeiq",
-  },
+  
 };
 
 export type ClientKey = keyof typeof CLIENTS;
@@ -105,12 +116,15 @@ export const ALL_CLIENTS = [
   { label: "Chakolas", value: "CHAKOLAS" },
   { label: "Ekabrahmaa", value: "Ekabrahmaa" },
   { label: "Geojit", value: "GEOJIT" },
+  { label: "Heal in Kerala", value: "Heal_in_Kerala" },
   { label: "Halwa Haweli", value: "HALWAHAWELI" },
   { label: "Incheon Kia", value: "IncheonKia" },
   { label: "Kendamil Qatar", value: "Kendamil_Qatar" },
+  { label: "Kulud", value: "Kulud" },
   { label: "Memory Train", value: "MemoryTrain" },
+  { label: "Mothers Food", value: "Mothers_Food" },
   { label: "Spaces ECO Clean", value: "SpacesECO_Clean" },
-  { label: "Zeiq", value: "Zeiq" },
+  
   
   
 ];

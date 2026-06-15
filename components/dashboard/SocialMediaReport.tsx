@@ -126,6 +126,19 @@ type PublicInstagramApiResponse = {
   error?: string;
 };
 
+type MetaInsightPoint = {
+  value?: number | string;
+};
+
+type MetaInsightMetric = {
+  name?: string;
+  values?: MetaInsightPoint[];
+};
+
+type MetaInsightsPayload = {
+  data?: MetaInsightMetric[];
+};
+
 const STEPS = [
   "Connecting to Meta API...",
   "Fetching Facebook posts...",
@@ -136,6 +149,54 @@ const STEPS = [
 ];
 
 const BASE = "https://graph.facebook.com/v25.0";
+const META_FETCH_TIMEOUT_MS = 15000;
+const AUDIENCE_FETCH_TIMEOUT_MS = 30000;
+
+async function fetchWithTimeout(url: string, init?: RequestInit, timeoutMs = META_FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    });
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
+const SOCIAL_CONFIG_CACHE_TTL_MS = 5 * 60 * 1000;
+const socialConfigCache = new Map<
+  string,
+  { expiresAt: number; value: SocialMediaConfig }
+>();
+const socialConfigInFlight = new Map<string, Promise<SocialMediaConfig>>();
+
+async function getSocialMediaConfig(client: string): Promise<SocialMediaConfig> {
+  const cached = socialConfigCache.get(client);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  if (cached) socialConfigCache.delete(client);
+
+  const pending = socialConfigInFlight.get(client);
+  if (pending) return pending;
+
+  const request = fetch(`/api/social-media?client=${client}`)
+    .then((res) => res.json() as Promise<SocialMediaConfig>)
+    .then((cfg) => {
+      socialConfigCache.set(client, {
+        expiresAt: Date.now() + SOCIAL_CONFIG_CACHE_TTL_MS,
+        value: cfg,
+      });
+      return cfg;
+    })
+    .finally(() => {
+      socialConfigInFlight.delete(client);
+    });
+
+  socialConfigInFlight.set(client, request);
+  return request;
+}
 
 function instagramProfileUrl(username: string, fallback?: string | null): string {
   if (fallback?.startsWith("http")) return fallback;
@@ -331,6 +392,29 @@ function parseInstagramProfileViews(payload: any): number {
     payload?.data?.[0];
 
   return sumInsightMetric(metric);
+}
+
+function sumMetricValues(metric?: MetaInsightMetric): number {
+  return metric?.values?.reduce((sum, item) => sum + (Number(item.value) || 0), 0) || 0;
+}
+
+function facebookAudienceTarget(platform: string, cfg: SocialMediaConfig): string | null {
+  return platform === "FB" || platform === "BOTH" ? cfg.fbPageId : null;
+}
+
+function instagramAudienceTarget(platform: string, cfg: SocialMediaConfig): string | null {
+  return platform === "IG" || platform === "BOTH" ? cfg.igUserId : null;
+}
+
+async function fetchAudienceJson(url: string | null): Promise<MetaInsightsPayload | null> {
+  if (!url) return null;
+
+  try {
+    const res = await fetchWithTimeout(url, undefined, AUDIENCE_FETCH_TIMEOUT_MS);
+    return await res.json();
+  } catch {
+    return null;
+  }
 }
 
 function matchBoosted(
@@ -2488,7 +2572,7 @@ export default function SocialMediaReport({
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("default");
 
-  const { boostedMap, boostedLoading } = useBoostedPosts(client, from, to);
+  const { boostedMap } = useBoostedPosts(client, from, to);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [selectedBoosted, setSelectedBoosted] = useState<BoostedPost | null>(null);
   const [cfgToken, setCfgToken] = useState("");
@@ -2512,7 +2596,8 @@ export default function SocialMediaReport({
   const { boostedMap: comparisonBoostedMap } = useBoostedPosts(
     client,
     comparisonRange.from,
-    comparisonRange.to
+    comparisonRange.to,
+    Boolean(data)
   );
 
   const [comparisonData, setComparisonData] = useState<ReportData | null>(null);
@@ -2598,9 +2683,44 @@ export default function SocialMediaReport({
   ]);
 
   useEffect(() => {
-    fetchReport();
-    fetchComparisonReport();
+    let cancelled = false;
+    const comparisonTimer = window.setTimeout(() => {
+      if (!cancelled) void fetchComparisonReport();
+    }, 800);
+
+    void fetchReport();
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(comparisonTimer);
+    };
   }, [client, from, to, platform]);
+
+  useEffect(() => {
+    if (!data) return;
+
+    const fbOrganicReach = data.fbPosts.reduce((sum, post) => sum + post.reach, 0);
+    const fbPaidReach = data.fbPosts.reduce(
+      (sum, post) => sum + (matchBoosted(post, boostedMap)?.reach || 0),
+      0
+    );
+    const igOrganicReach = data.igPosts.reduce((sum, post) => sum + post.reach, 0);
+    const igPaidReach = data.igPosts.reduce(
+      (sum, post) => sum + (matchBoosted(post, boostedMap)?.reach || 0),
+      0
+    );
+
+    setFbReachBreakdown({
+      total: fbOrganicReach + fbPaidReach,
+      organic: fbOrganicReach,
+      paid: fbPaidReach,
+    });
+    setIgReachBreakdown({
+      total: igOrganicReach + igPaidReach,
+      organic: igOrganicReach,
+      paid: igPaidReach,
+    });
+  }, [data, boostedMap]);
 
   // ── helper: fetch reel-specific metrics for a single post ────────
   const fetchReelMetrics = async (
@@ -2653,7 +2773,7 @@ export default function SocialMediaReport({
     };
 
     try {
-      const wRes = await fetch(
+      const wRes = await fetchWithTimeout(
         `${BASE}/${postId}/insights?metric=ig_reels_avg_watch_time,reels_skip_rate,views&period=lifetime&access_token=${token}`
       );
       const wData = await wRes.json();
@@ -2663,10 +2783,10 @@ export default function SocialMediaReport({
     } catch {
       try {
         const [watchRes, viewsRes] = await Promise.all([
-          fetch(
+          fetchWithTimeout(
             `${BASE}/${postId}/insights?metric=ig_reels_avg_watch_time,reels_skip_rate&period=lifetime&access_token=${token}`
           ),
-          fetch(
+          fetchWithTimeout(
             `${BASE}/${postId}/insights?metric=views&period=lifetime&access_token=${token}`
           ),
         ]);
@@ -2682,8 +2802,7 @@ export default function SocialMediaReport({
     setComparisonLoading(true);
 
     try {
-      const cfgRes = await fetch(`/api/social-media?client=${client}`);
-      const cfg = (await cfgRes.json()) as SocialMediaConfig;
+      const cfg = await getSocialMediaConfig(client);
       const publicFallback = publicInstagramFallback(cfg, platform, client);
       if (publicFallback) {
         setComparisonAudience({
@@ -2710,63 +2829,59 @@ export default function SocialMediaReport({
 
       let fbPosts: Post[] = [];
       let igPosts: Post[] = [];
-
-      const [fbFollowsRes, fbViewsRes, igFollowsRes, igProfileViewsRes] =
-        await Promise.all([
-          fetch(
-            `${BASE}/${cfg.fbPageId}/insights?metric=page_daily_follows_unique,page_daily_unfollows_unique&period=day&since=${comparisonRange.from}&until=${comparisonRange.to}&access_token=${cfg.token}`
-          ),
-          fetch(
-            `${BASE}/${cfg.fbPageId}/insights?metric=page_views_total&period=day&since=${comparisonRange.from}&until=${comparisonRange.to}&access_token=${cfg.token}`
-          ),
-          fetch(
-            `${BASE}/${cfg.igUserId}/insights?metric=follows_and_unfollows&period=day&metric_type=total_value&breakdown=follow_type&since=${comparisonRange.from}&until=${comparisonRange.to}&access_token=${cfg.token}`
-          ),
-          fetch(
-            `${BASE}/${cfg.igUserId}/insights?metric=profile_views&metric_type=total_value&period=day&since=${comparisonRange.from}&until=${comparisonRange.to}&access_token=${cfg.token}`
-          ),
-        ]);
+      const fbAudienceId = facebookAudienceTarget(platform, cfg);
+      const igAudienceId = instagramAudienceTarget(platform, cfg);
 
       const [fbFollowsJson, fbViewsJson, igFollowsJson, igProfileViewsJson] =
         await Promise.all([
-          fbFollowsRes.json(),
-          fbViewsRes.json(),
-          igFollowsRes.json(),
-          igProfileViewsRes.json(),
+          fetchAudienceJson(
+            fbAudienceId
+              ? `${BASE}/${fbAudienceId}/insights?metric=page_daily_follows_unique,page_daily_unfollows_unique&period=day&since=${comparisonRange.from}&until=${comparisonRange.to}&access_token=${cfg.token}`
+              : null
+          ),
+          fetchAudienceJson(
+            fbAudienceId
+              ? `${BASE}/${fbAudienceId}/insights?metric=page_views_total&period=day&since=${comparisonRange.from}&until=${comparisonRange.to}&access_token=${cfg.token}`
+              : null
+          ),
+          fetchAudienceJson(
+            igAudienceId
+              ? `${BASE}/${igAudienceId}/insights?metric=follows_and_unfollows&period=day&metric_type=total_value&breakdown=follow_type&since=${comparisonRange.from}&until=${comparisonRange.to}&access_token=${cfg.token}`
+              : null
+          ),
+          fetchAudienceJson(
+            igAudienceId
+              ? `${BASE}/${igAudienceId}/insights?metric=profile_views&metric_type=total_value&period=day&since=${comparisonRange.from}&until=${comparisonRange.to}&access_token=${cfg.token}`
+              : null
+          ),
         ]);
 
       const fbFw = fbFollowsJson?.data?.find(
-        (m: any) => m.name === "page_daily_follows_unique"
+        (m) => m.name === "page_daily_follows_unique"
       );
       const fbUf = fbFollowsJson?.data?.find(
-        (m: any) => m.name === "page_daily_unfollows_unique"
+        (m) => m.name === "page_daily_unfollows_unique"
       );
       const fbPageViewsMetric = fbViewsJson?.data?.find(
-        (m: any) => m.name === "page_views_total"
+        (m) => m.name === "page_views_total"
       );
       const igFollowStats = parseInstagramFollowStats(igFollowsJson);
 
       setComparisonAudience({
         fbFollows: {
-          follows:
-            fbFw?.values?.reduce((s: number, v: any) => s + (v.value || 0), 0) || 0,
-          unfollows:
-            fbUf?.values?.reduce((s: number, v: any) => s + (v.value || 0), 0) || 0,
+          follows: sumMetricValues(fbFw),
+          unfollows: sumMetricValues(fbUf),
         },
         igFollows: {
           follows: igFollowStats.follows,
           unfollows: igFollowStats.unfollows,
         },
-        fbPageViews:
-          fbPageViewsMetric?.values?.reduce(
-            (s: number, v: any) => s + (v.value || 0),
-            0
-          ) || 0,
+        fbPageViews: sumMetricValues(fbPageViewsMetric),
         igProfileViews: parseInstagramProfileViews(igProfileViewsJson),
       });
 
       if (platform === "FB" || platform === "BOTH") {
-        const fbRes = await fetch(
+        const fbRes = await fetchWithTimeout(
           `${BASE}/${cfg.fbPageId}/posts?fields=id,message,created_time,permalink_url,full_picture,reactions.summary(total_count),comments.summary(total_count),shares,attachments{media_type,media{source}}&since=${comparisonRange.from}&until=${comparisonRange.to}&limit=100&access_token=${cfg.token}`
         );
         const fbData = await fbRes.json();
@@ -2783,7 +2898,7 @@ export default function SocialMediaReport({
             const shares = post.shares?.count ?? 0;
 
             try {
-              const insRes = await fetch(
+              const insRes = await fetchWithTimeout(
                 `${BASE}/${post.id}/insights?metric=post_impressions_unique&access_token=${cfg.token}`
               );
               const ins = await insRes.json();
@@ -2793,7 +2908,7 @@ export default function SocialMediaReport({
               let views = 0;
               if (isReel) {
                 try {
-                  const viewRes = await fetch(
+                  const viewRes = await fetchWithTimeout(
                     `${BASE}/${post.id}/insights?metric=post_video_views&access_token=${cfg.token}`
                   );
                   const viewData = await viewRes.json();
@@ -2847,7 +2962,7 @@ export default function SocialMediaReport({
       }
 
       if (platform === "IG" || platform === "BOTH") {
-        const igRes = await fetch(
+        const igRes = await fetchWithTimeout(
           `${BASE}/${cfg.igUserId}/media?fields=id,caption,media_type,timestamp,permalink,media_url,thumbnail_url&since=${comparisonRange.from}&until=${comparisonRange.to}&limit=100&access_token=${cfg.token}`
         );
         const igData = await igRes.json();
@@ -2856,7 +2971,7 @@ export default function SocialMediaReport({
         igPosts = await Promise.all(
           rawIG.map(async (post: any) => {
             try {
-              const insRes = await fetch(
+              const insRes = await fetchWithTimeout(
                 `${BASE}/${post.id}/insights?metric=reach,likes,comments,shares,saved&period=lifetime&access_token=${cfg.token}`
               );
               const ins = await insRes.json();
@@ -2982,8 +3097,7 @@ export default function SocialMediaReport({
     let cfg: SocialMediaConfig;
 
     try {
-      const cfgRes = await fetch(`/api/social-media?client=${client}`);
-      cfg = (await cfgRes.json()) as SocialMediaConfig;
+      cfg = await getSocialMediaConfig(client);
       setCfgToken(cfg.token || "");
 
       const publicFallback = publicInstagramFallback(cfg, platform, client);
@@ -3018,55 +3132,52 @@ export default function SocialMediaReport({
       setFbReachBreakdown(emptyReach);
       setIgReachBreakdown(emptyReach);
 
-      fetch(
-        `${BASE}/${cfg.fbPageId}/insights?metric=page_daily_follows_unique,page_daily_unfollows_unique&period=day&since=${from}&until=${to}&access_token=${cfg.token}`
-      )
-        .then((r) => r.json())
-        .then((d) => {
-          const fw = d?.data?.find((m: any) => m.name === "page_daily_follows_unique");
-          const uf = d?.data?.find((m: any) => m.name === "page_daily_unfollows_unique");
+      const fbAudienceId = facebookAudienceTarget(platform, cfg);
+      const igAudienceId = instagramAudienceTarget(platform, cfg);
+
+      if (fbAudienceId) {
+        fetchAudienceJson(
+          `${BASE}/${fbAudienceId}/insights?metric=page_daily_follows_unique,page_daily_unfollows_unique&period=day&since=${from}&until=${to}&access_token=${cfg.token}`
+        ).then((d) => {
+          const fw = d?.data?.find((m) => m.name === "page_daily_follows_unique");
+          const uf = d?.data?.find((m) => m.name === "page_daily_unfollows_unique");
           setFbFollows({
-            follows:
-              fw?.values?.reduce((s: number, v: any) => s + (v.value || 0), 0) || 0,
-            unfollows:
-              uf?.values?.reduce((s: number, v: any) => s + (v.value || 0), 0) || 0,
+            follows: sumMetricValues(fw),
+            unfollows: sumMetricValues(uf),
           });
-        })
-        .catch(() => { });
+        });
 
-      fetch(
-        `${BASE}/${cfg.fbPageId}/insights?metric=page_views_total&period=day&since=${from}&until=${to}&access_token=${cfg.token}`
-      )
-        .then((r) => r.json())
-        .then((d) => {
-          const metric = d?.data?.find((m: any) => m.name === "page_views_total");
-          setFbPageViews(
-            metric?.values?.reduce((s: number, v: any) => s + (v.value || 0), 0) || 0
-          );
-        })
-        .catch(() => { });
+        fetchAudienceJson(
+          `${BASE}/${fbAudienceId}/insights?metric=page_views_total&period=day&since=${from}&until=${to}&access_token=${cfg.token}`
+        ).then((d) => {
+          const metric = d?.data?.find((m) => m.name === "page_views_total");
+          setFbPageViews(sumMetricValues(metric));
+        });
+      } else {
+        setFbFollows({ follows: 0, unfollows: 0 });
+        setFbPageViews(0);
+      }
 
-      fetch(
-        `${BASE}/${cfg.igUserId}/insights?metric=follows_and_unfollows&period=day&metric_type=total_value&breakdown=follow_type&since=${from}&until=${to}&access_token=${cfg.token}`
-      )
-        .then((r) => r.json())
-        .then((d) => {
+      if (igAudienceId) {
+        fetchAudienceJson(
+          `${BASE}/${igAudienceId}/insights?metric=follows_and_unfollows&period=day&metric_type=total_value&breakdown=follow_type&since=${from}&until=${to}&access_token=${cfg.token}`
+        ).then((d) => {
           const igFollowStats = parseInstagramFollowStats(d);
           setIgFollows({
             follows: igFollowStats.follows,
             unfollows: igFollowStats.unfollows,
           });
-        })
-        .catch(() => { });
+        });
 
-      fetch(
-        `${BASE}/${cfg.igUserId}/insights?metric=profile_views&metric_type=total_value&period=day&since=${from}&until=${to}&access_token=${cfg.token}`
-      )
-        .then((r) => r.json())
-        .then((d) => {
+        fetchAudienceJson(
+          `${BASE}/${igAudienceId}/insights?metric=profile_views&metric_type=total_value&period=day&since=${from}&until=${to}&access_token=${cfg.token}`
+        ).then((d) => {
           setIgProfileViews(parseInstagramProfileViews(d));
-        })
-        .catch(() => { });
+        });
+      } else {
+        setIgFollows({ follows: 0, unfollows: 0 });
+        setIgProfileViews(0);
+      }
     } catch {
       setError("Failed to load client config");
       setLoading(false);
@@ -3078,12 +3189,11 @@ export default function SocialMediaReport({
       let igPosts: Post[] = [];
       setStep(0);
       setProgress(10);
-      await new Promise((r) => setTimeout(r, 400));
 
       if (platform === "FB" || platform === "BOTH") {
         setStep(1);
         setProgress(20);
-        const fbRes = await fetch(
+        const fbRes = await fetchWithTimeout(
           `${BASE}/${cfg.fbPageId}/posts?fields=id,message,created_time,permalink_url,full_picture,reactions.summary(total_count),comments.summary(total_count),shares,attachments{media_type,media{source}}&since=${from}&until=${to}&limit=100&access_token=${cfg.token}`
         );
         const fbData = await fbRes.json();
@@ -3102,7 +3212,7 @@ export default function SocialMediaReport({
             const shares = post.shares?.count ?? 0;
 
             try {
-              const insRes = await fetch(
+              const insRes = await fetchWithTimeout(
                 `${BASE}/${post.id}/insights?metric=post_impressions_unique&access_token=${cfg.token}`
               );
               const ins = await insRes.json();
@@ -3112,7 +3222,7 @@ export default function SocialMediaReport({
               let views = 0;
               if (isReel) {
                 try {
-                  const viewRes = await fetch(
+                  const viewRes = await fetchWithTimeout(
                     `${BASE}/${post.id}/insights?metric=post_video_views&access_token=${cfg.token}`
                   );
                   const viewData = await viewRes.json();
@@ -3167,7 +3277,7 @@ export default function SocialMediaReport({
       if (platform === "IG" || platform === "BOTH") {
         setStep(2);
         setProgress(65);
-        const igRes = await fetch(
+        const igRes = await fetchWithTimeout(
           `${BASE}/${cfg.igUserId}/media?fields=id,caption,media_type,timestamp,permalink,media_url,thumbnail_url&since=${from}&until=${to}&limit=100&access_token=${cfg.token}`
         );
         const igData = await igRes.json();
@@ -3178,7 +3288,7 @@ export default function SocialMediaReport({
         igPosts = await Promise.all(
           rawIG.map(async (post: any) => {
             try {
-              const insRes = await fetch(
+              const insRes = await fetchWithTimeout(
                 `${BASE}/${post.id}/insights?metric=reach,likes,comments,shares,saved&period=lifetime&access_token=${cfg.token}`
               );
               const ins = await insRes.json();
@@ -3287,7 +3397,6 @@ export default function SocialMediaReport({
 
       setStep(5);
       setProgress(100);
-      await new Promise((r) => setTimeout(r, 300));
       setData({ fbPosts, igPosts });
     } catch (e: any) {
       setError(e.message || "Something went wrong");
@@ -3429,7 +3538,7 @@ export default function SocialMediaReport({
     { key: "engagement", label: "Top Engagement" },
   ];
 
-  if (loading || boostedLoading) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[62vh] px-4">
         <div

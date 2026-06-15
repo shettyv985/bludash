@@ -6,6 +6,7 @@ import type {
 } from "@/components/dashboard/useAdsPerformance";
 
 const BASE = "https://graph.facebook.com/v25.0";
+const META_FETCH_TIMEOUT_MS = 20000;
 
 type MetaAction = {
   action_type?: string;
@@ -135,18 +136,25 @@ type AdsConfig = {
 };
 
 async function fetchJSON<T>(url: string): Promise<T> {
-  const res = await fetch(url, { cache: "no-store" });
-  const data = (await res.json()) as T & MetaErrorResponse;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), META_FETCH_TIMEOUT_MS);
 
-  if (data?.error) {
-    throw new Error(data.error.message || "Meta API request failed");
+  try {
+    const res = await fetch(url, { cache: "no-store", signal: controller.signal });
+    const data = (await res.json()) as T & MetaErrorResponse;
+
+    if (data?.error) {
+      throw new Error(data.error.message || "Meta API request failed");
+    }
+
+    if (!res.ok) {
+      throw new Error(`Meta API request failed (${res.status})`);
+    }
+
+    return data as T;
+  } finally {
+    clearTimeout(timeout);
   }
-
-  if (!res.ok) {
-    throw new Error(`Meta API request failed (${res.status})`);
-  }
-
-  return data as T;
 }
 
 async function fetchAllPages<T>(initialUrl: string, maxItems = 10000) {
