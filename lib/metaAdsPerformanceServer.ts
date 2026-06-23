@@ -449,7 +449,7 @@ function formatReportDate(date: Date) {
 function buildDateChunks(from: string, to: string) {
   const start = parseReportDate(from);
   const end = parseReportDate(to);
-  const chunkDays = Math.max(1, Number(process.env.CREATIVE_DIGEST_INSIGHTS_CHUNK_DAYS || "2") || 2);
+  const chunkDays = Math.max(1, Number(process.env.META_ADS_INSIGHTS_CHUNK_DAYS || "2") || 2);
 
   if (!start || !end || start > end) {
     return [{ from, to }];

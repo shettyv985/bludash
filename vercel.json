@@ -1,8 +1,0 @@
-{
-  "crons": [
-    {
-      "path": "/api/creative-digest",
-      "schedule": "0 3 */2 * *"
-    }
-  ]
-}

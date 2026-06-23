@@ -47,11 +47,6 @@ export const CLIENTS = {
     name: "Care n Cure Pharmacy",
     clientKey: "Care_n_Cure_Pharmacy",
   },
-  Ekabrahmaa123: {
-    password: "ekabrahmaa@123",
-    name: "Ekabrahmaa",
-    clientKey: "Ekabrahmaa",
-  },
   geojit123: {
     password: "geojit@123",
     name: "Geojit",
@@ -114,7 +109,6 @@ export const ALL_CLIENTS = [
   { label: "Blusteak Media", value: "Blusteak_Media" },
   { label: "Care n Cure Pharmacy", value: "Care_n_Cure_Pharmacy" },
   { label: "Chakolas", value: "CHAKOLAS" },
-  { label: "Ekabrahmaa", value: "Ekabrahmaa" },
   { label: "Geojit", value: "GEOJIT" },
   { label: "Heal in Kerala", value: "Heal_in_Kerala" },
   { label: "Halwa Haweli", value: "HALWAHAWELI" },

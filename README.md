@@ -1,6 +1,6 @@
 # BLUDASH
 
-A custom analytics and reporting dashboard for Meta Ads and social media performance. This Next.js app combines client login, Meta data fetching, AI-powered analysis, PDF/HTML report generation, and email digest automation.
+A custom analytics and reporting dashboard for Meta Ads and social media performance. This Next.js app combines client login, Meta data fetching, AI-powered analysis, and PDF/HTML report generation.
 
 ## What this project does
 
@@ -10,7 +10,6 @@ A custom analytics and reporting dashboard for Meta Ads and social media perform
 - Builds **pre-analyzed report payloads** from raw Meta data.
 - Sends data to **generative AI** to create deep performance reports.
 - Renders HTML reports for browser printing and PDF generation.
-- Can trigger **creative digest emails** using a scheduled API route.
 - Supports a **public Instagram fallback** when private API access is unavailable.
 
 ## Core features
@@ -21,7 +20,6 @@ A custom analytics and reporting dashboard for Meta Ads and social media perform
 - **Report selection:** choose between `Social Media` and `Performance` reports.
 - **Date range and platform filters:** select reporting window and platform filter (Facebook / Instagram / Both).
 - **AI analysis:** uses OpenAI Responses API and Manus endpoints for deep JSON and HTML report generation.
-- **Email digest:** build and send creative digest emails via `app/api/creative-digest/route.ts` and `lib/creativeDigest.ts`.
 
 ## Architecture overview
 
@@ -39,7 +37,6 @@ A custom analytics and reporting dashboard for Meta Ads and social media perform
 - `app/api/ads/route.ts` handles Meta Ads configuration and snapshot requests.
 - `app/api/social-media/route.ts` returns resolved social media configuration.
 - `app/api/public-instagram/route.ts` scrapes public Instagram profile data when private API access is unavailable.
-- `app/api/creative-digest/route.ts` triggers creative digest generation and email sending.
 - `app/api/gpt-report/route.ts` sends ad performance payloads to OpenAI and returns JSON report data.
 - `app/api/social-gpt-report/route.ts` sends social media payloads to OpenAI and returns JSON report data.
 - `app/api/gpt-html-report/route.ts` renders report HTML from payload and AI analysis.
@@ -56,8 +53,6 @@ A custom analytics and reporting dashboard for Meta Ads and social media perform
 - `lib/buildSocialReportPayload.ts` turns social media posts into a structured payload.
 - `lib/openaiResponses.ts` handles OpenAI Responses API requests and JSON extraction.
 - `lib/generateReportPDF.ts` and `lib/generateSocialReportPDF.ts` request HTML renderers and open report tabs.
-- `lib/creativeDigest.ts` builds multi-client digest inputs, runs analysis, and sends email digests.
-- `lib/mailer.ts` sends email through Resend.
 
 ## How this is useful
 
@@ -65,7 +60,6 @@ BLUDASH is built for marketing teams and digital agencies that need:
 
 - a single pane of glass for **Meta Ads performance** and **organic social insights**
 - quick **AI-generated executive summaries** and **deep report narratives**
-- **creative audit emails** that can be scheduled or triggered manually
 - a flexible client-based dashboard with **admin access** and **client restrictions**
 - fallback support for **public Instagram scraping** when private tokens are missing
 
@@ -94,14 +88,11 @@ npm run start
 
 ## Environment configuration
 
-This project relies on environment variables for Meta API credentials, AI APIs, email delivery, and report automation.
+This project relies on environment variables for Meta API credentials, AI APIs, and report generation.
 
 ### Required env vars
 
 - `OPENAI_API_KEY` — required for OpenAI report generation.
-- `RESEND_API_KEY` — required if you want the email digest feature to send messages.
-- `REPORT_EMAIL_FROM` — sender address for digest emails.
-- `CRON_SECRET` — optional secret for securing the creative digest route in production.
 
 ### Optional AI and report env vars
 
@@ -109,6 +100,7 @@ This project relies on environment variables for Meta API credentials, AI APIs, 
 - `GEMINI_API_KEY` — optional if you use the Gemini HTML report route.
 - `OPENAI_REPORT_MODEL` — optional model override for OpenAI Responses API.
 - `OPENAI_REPORT_REASONING_EFFORT` — optional reasoning effort setting for OpenAI (`low`, `medium`, `high`, `xhigh`).
+- `META_ADS_INSIGHTS_CHUNK_DAYS` — optional number of days fetched per Meta Ads insights request; defaults to `2`.
 
 ### Client-specific env vars
 
@@ -122,14 +114,6 @@ Each client uses a prefix matching the `clientKey` values in `lib/auth.ts` and `
 - `ABADBuilders_IG_USERNAME`
 
 If the Instagram Business ID is not available, the code can attempt to resolve it from the linked Facebook page by using `FB_PAGE_ID` and the access token.
-
-### Optional creative digest env vars
-
-- `CREATIVE_DIGEST_CLIENTS` — comma-separated list of client keys for automatic digest runs.
-- `CREATIVE_DIGEST_LOOKBACK_DAYS` — number of days to include in digest date range.
-- `CREATIVE_DIGEST_INCLUDE_TODAY` — set to `1` to include today in the digest range.
-- `CREATIVE_DIGEST_MANUAL_ENABLED` — set to `1` to allow manual POST triggers in production.
-- `CREATIVE_DIGEST_EMAIL_TO` — default recipient for digest emails.
 
 ## Credentials and login
 
@@ -151,8 +135,6 @@ The login form stores the session in `localStorage` under `bludash_user`.
 - `components/LoginForm.tsx` — login UI and authentication logic.
 - `lib/metaClientConfig.ts` — client config resolution and required field checks.
 - `lib/openaiResponses.ts` — shared OpenAI request and JSON response handling.
-- `lib/creativeDigest.ts` — creative digest generation and email flow.
-- `lib/mailer.ts` — Resend email integration.
 
 ## Data flow summary
 
@@ -179,7 +161,6 @@ The login form stores the session in `localStorage` under `bludash_user`.
 - `typescript` 5
 - `tailwindcss` 4
 - `lucide-react` for icons
-- `resend` for email delivery
 - `jspdf` and `jspdf-autotable` for PDF utilities
 
 ## How to extend

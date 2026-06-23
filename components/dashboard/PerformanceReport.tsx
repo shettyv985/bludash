@@ -34,6 +34,7 @@ type SortKey =
 
 type SortDir = "asc" | "desc";
 type ViewMode = "grouped" | "flat";
+type SummaryTone = "blue" | "violet" | "emerald" | "amber" | "rose" | "cyan";
 
 interface Props {
   client: string;
@@ -115,6 +116,7 @@ function SummaryCard({
   sub,
   accent,
   icon,
+  tone = "blue",
   dark,
 }: {
   label: string;
@@ -122,32 +124,92 @@ function SummaryCard({
   sub?: string;
   accent?: string;
   icon: ReactNode;
+  tone?: SummaryTone;
   dark: boolean;
 }) {
+  const toneClasses = {
+    blue: dark
+      ? "border-blue-400/20 bg-[linear-gradient(145deg,rgba(18,35,70,0.98),rgba(9,18,38,0.95))]"
+      : "border-blue-200 bg-[linear-gradient(145deg,#ffffff,#eff6ff)]",
+    violet: dark
+      ? "border-violet-400/20 bg-[linear-gradient(145deg,rgba(39,24,68,0.98),rgba(18,11,34,0.95))]"
+      : "border-violet-200 bg-[linear-gradient(145deg,#ffffff,#f5f3ff)]",
+    emerald: dark
+      ? "border-emerald-400/20 bg-[linear-gradient(145deg,rgba(15,48,44,0.98),rgba(9,24,22,0.95))]"
+      : "border-emerald-200 bg-[linear-gradient(145deg,#ffffff,#ecfdf5)]",
+    amber: dark
+      ? "border-amber-400/20 bg-[linear-gradient(145deg,rgba(57,35,12,0.98),rgba(26,18,8,0.95))]"
+      : "border-amber-200 bg-[linear-gradient(145deg,#ffffff,#fffbeb)]",
+    rose: dark
+      ? "border-rose-400/20 bg-[linear-gradient(145deg,rgba(61,20,36,0.98),rgba(28,10,18,0.95))]"
+      : "border-rose-200 bg-[linear-gradient(145deg,#ffffff,#fff1f2)]",
+    cyan: dark
+      ? "border-cyan-400/20 bg-[linear-gradient(145deg,rgba(13,48,60,0.98),rgba(8,25,32,0.95))]"
+      : "border-cyan-200 bg-[linear-gradient(145deg,#ffffff,#ecfeff)]",
+  } as const;
+  const valueClasses = {
+    blue: dark ? "text-blue-300" : "text-blue-700",
+    violet: dark ? "text-violet-300" : "text-violet-700",
+    emerald: dark ? "text-emerald-300" : "text-emerald-700",
+    amber: dark ? "text-amber-300" : "text-amber-700",
+    rose: dark ? "text-rose-300" : "text-rose-700",
+    cyan: dark ? "text-cyan-300" : "text-cyan-700",
+  } as const;
+
   return (
     <div
-      className={`rounded-[20px] border p-4 transition-colors ${
-        dark
-          ? "border-blue-400/20 bg-[linear-gradient(145deg,rgba(18,26,52,0.98),rgba(10,14,28,0.95))] shadow-[0_16px_40px_rgba(37,99,235,0.18)]"
-          : "border-blue-200 bg-[linear-gradient(145deg,#ffffff,#eff6ff)] shadow-[0_16px_40px_rgba(37,99,235,0.10)]"
-      }`}
+      className={`rounded-[24px] border p-5 transition-colors shadow-[0_16px_40px_rgba(15,23,42,0.08)] ${toneClasses[tone]}`}
     >
-      <div className="flex items-start justify-between gap-3 mb-4">
-        <p className={`text-[10px] font-semibold tracking-[0.08em] uppercase truncate ${dark ? "text-white/55" : "text-slate-500"}`}>
+      <div className="flex items-start justify-between gap-3">
+        <p className={`text-[11px] font-semibold tracking-[0.14em] uppercase truncate ${dark ? "text-white/55" : "text-slate-500"}`}>
           {label}
         </p>
-        <div className={`w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 ${dark ? "bg-white/[0.07]" : "bg-blue-100"}`}>
+        <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 border ${dark ? "border-white/[0.08] bg-white/[0.06]" : "border-white/80 bg-white/70"}`}>
           {icon}
         </div>
       </div>
-      <p className={`text-[20px] sm:text-[22px] font-bold leading-none tracking-[-0.02em] break-all ${accent || (dark ? "text-white" : "text-slate-950")}`}>
-  {value}
-</p>
+      <p className={`mt-5 text-[28px] sm:text-[32px] font-bold leading-none tracking-[-0.03em] break-all tabular-nums ${accent || valueClasses[tone]}`}>
+        {value}
+      </p>
       {sub && (
-        <div className={`mt-4 rounded-xl px-3 py-2 border ${dark ? "border-white/[0.06] bg-white/[0.04]" : "border-slate-200/80 bg-slate-50/80"}`}>
-          <p className={`text-[10px] leading-relaxed font-medium ${dark ? "text-white/40" : "text-slate-500"}`}>{sub}</p>
-        </div>
+        <p className={`mt-3 text-[10px] leading-relaxed font-medium ${dark ? "text-white/35" : "text-slate-400"}`}>
+          {sub}
+        </p>
       )}
+    </div>
+  );
+}
+
+function ReportSectionHeading({
+  title,
+  detail,
+  tone,
+  dark,
+}: {
+  title: string;
+  detail: string;
+  tone: SummaryTone;
+  dark: boolean;
+}) {
+  const dotClasses: Record<SummaryTone, string> = {
+    blue: "bg-blue-500",
+    violet: "bg-violet-500",
+    emerald: "bg-emerald-500",
+    amber: "bg-amber-500",
+    rose: "bg-rose-500",
+    cyan: "bg-cyan-500",
+  };
+
+  return (
+    <div className="flex items-center gap-3 px-1">
+      <div className={`w-2 h-2 rounded-full ${dotClasses[tone]}`} />
+      <h3 className={`text-[12px] font-bold tracking-[0.17em] uppercase ${dark ? "text-white/65" : "text-slate-700"}`}>
+        {title}
+      </h3>
+      <div className={`flex-1 h-px ${dark ? "bg-white/[0.06]" : "bg-black/[0.06]"}`} />
+      <span className={`text-[10px] font-semibold rounded-full px-3 py-1 border ${dark ? "text-white/50 border-white/[0.08] bg-white/[0.04]" : "text-slate-500 border-slate-200 bg-white/80"}`}>
+        {detail}
+      </span>
     </div>
   );
 }
@@ -1395,6 +1457,9 @@ const totalSpend = summary.totalSpend;
 const totalReach = summary.totalReach;
 const totalImpressions = summary.totalImpressions;
 const totalClicks = summary.totalClicks;
+const totalLikes = summary.totalLikes;
+const totalComments = summary.totalComments;
+const totalShares = summary.totalShares;
 const totalLeads = summary.totalLeads;
 const totalLandingPageViews = summary.totalLandingPageViews;
 const totalPostEngagements = summary.totalPostEngagements;
@@ -1437,9 +1502,166 @@ const performanceReels = allAds.filter((ad) => ad.isVideo || ad.insights.videoVi
     { key: "leads", label: "Top Leads" },
     { key: "cpl", label: "Top CPL" },
     { key: "postEngagements", label: "Top Engagement" },
+    { key: "likes", label: "Top Likes" },
+    { key: "comments", label: "Top Comments" },
+    { key: "shares", label: "Top Shares" },
   ];
 
   const statusTabs = ["ALL", "ACTIVE", "PAUSED", "ARCHIVED"] as const;
+  type SummaryCardConfig = {
+    label: string;
+    value: string;
+    sub: string;
+    tone: SummaryTone;
+    accent?: string;
+    icon: ReactNode;
+  };
+  const compare = (
+    current: number,
+    previous: number,
+    formatter: (value: number) => string
+  ) =>
+    previousMonthLoading
+      ? "Loading previous-month comparison..."
+      : comparisonSub(
+          `${comparisonRange.from} to ${comparisonRange.to}`,
+          current,
+          previous,
+          formatter
+        );
+  const deliveryCards: SummaryCardConfig[] = [
+    {
+      label: "Total Spend",
+      value: fmtMoney(totalSpend),
+      sub: compare(totalSpend, comparisonSummary.totalSpend, fmtMoney),
+      tone: "blue",
+      icon: <svg {...iconProps} className={iconCls}><line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>,
+    },
+    {
+      label: "Total Reach",
+      value: fmt(totalReach),
+      sub: compare(totalReach, comparisonSummary.totalReach, fmt),
+      tone: "rose",
+      icon: <svg {...iconProps} className={iconCls}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>,
+    },
+    {
+      label: "Impressions",
+      value: fmt(totalImpressions),
+      sub: compare(totalImpressions, comparisonSummary.totalImpressions, fmt),
+      tone: "violet",
+      icon: <svg {...iconProps} className={iconCls}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>,
+    },
+    {
+      label: "Link Clicks",
+      value: fmt(totalClicks),
+      sub: compare(totalClicks, comparisonSummary.totalClicks, fmt),
+      tone: "cyan",
+      icon: <svg {...iconProps} className={iconCls}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg>,
+    },
+    {
+      label: "Leads",
+      value: fmt(totalLeads),
+      sub: compare(totalLeads, comparisonSummary.totalLeads, fmt),
+      tone: "emerald",
+      icon: <svg {...iconProps} className={iconCls}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>,
+    },
+  ];
+  const engagementCards: SummaryCardConfig[] = [
+    {
+      label: "Total Likes",
+      value: fmt(totalLikes),
+      sub: compare(totalLikes, comparisonSummary.totalLikes, fmt),
+      tone: "blue",
+      icon: <svg {...iconProps} className={iconCls}><path d="M7 10v12" /><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88Z" /></svg>,
+    },
+    {
+      label: "Total Comments",
+      value: fmt(totalComments),
+      sub: compare(totalComments, comparisonSummary.totalComments, fmt),
+      tone: "emerald",
+      icon: <svg {...iconProps} className={iconCls}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>,
+    },
+    {
+      label: "Total Shares",
+      value: fmt(totalShares),
+      sub: compare(totalShares, comparisonSummary.totalShares, fmt),
+      tone: "amber",
+      icon: <svg {...iconProps} className={iconCls}><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" /></svg>,
+    },
+    {
+      label: "Post Engagements",
+      value: fmt(totalPostEngagements),
+      sub: compare(totalPostEngagements, comparisonSummary.totalPostEngagements, fmt),
+      tone: "rose",
+      icon: <svg {...iconProps} className={iconCls}><path d="M3 3v18h18" /><path d="m7 16 4-5 4 3 4-6" /></svg>,
+    },
+    {
+      label: "Video Views",
+      value: fmt(totalVideoViews),
+      sub: compare(totalVideoViews, comparisonSummary.totalVideoViews, fmt),
+      tone: "violet",
+      icon: <svg {...iconProps} className={iconCls}><polygon points="5 3 19 12 5 21 5 3" /></svg>,
+    },
+  ];
+  const efficiencyCards: SummaryCardConfig[] = [
+    {
+      label: "CTR",
+      value: fmtPct(overallCTR),
+      sub: compare(overallCTR, comparisonSummary.overallCTR, fmtPct),
+      tone: "emerald",
+      accent: overallCTR >= 1.5 ? (dark ? "text-emerald-300" : "text-emerald-700") : overallCTR < 0.8 ? "text-rose-500" : "text-amber-500",
+      icon: <svg {...iconProps} className={iconCls}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></svg>,
+    },
+    {
+      label: "Cost Per Click",
+      value: overallCPC > 0 ? fmtMoney(overallCPC) : "—",
+      sub: compare(overallCPC, comparisonSummary.overallCPC, fmtMoney),
+      tone: "blue",
+      icon: <svg {...iconProps} className={iconCls}><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="16" /><line x1="8" y1="12" x2="16" y2="12" /></svg>,
+    },
+    {
+      label: "CPM",
+      value: fmtMoney(overallCPM),
+      sub: compare(overallCPM, comparisonSummary.overallCPM, fmtMoney),
+      tone: "violet",
+      icon: <svg {...iconProps} className={iconCls}><rect x="1" y="4" width="22" height="16" rx="2" ry="2" /><line x1="1" y1="10" x2="23" y2="10" /></svg>,
+    },
+    {
+      label: "Cost Per Lead",
+      value: overallCPL > 0 ? fmtMoney(overallCPL) : "—",
+      sub: compare(overallCPL, comparisonSummary.overallCPL, fmtMoney),
+      tone: "amber",
+      icon: <svg {...iconProps} className={iconCls}><line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>,
+    },
+    {
+      label: "Landing Page Views",
+      value: fmt(totalLandingPageViews),
+      sub: compare(totalLandingPageViews, comparisonSummary.totalLandingPageViews, fmt),
+      tone: "cyan",
+      icon: <svg {...iconProps} className={iconCls}><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" /></svg>,
+    },
+    {
+      label: "50% Hold Rate",
+      value: avgVideoHoldRate50 > 0 ? `${fmtPct(avgVideoHoldRate50)} (${fmt(totalHeldVideoPeople)})` : "—",
+      sub: compare(avgVideoHoldRate50, comparisonSummary.avgVideoHoldRate50, fmtPct),
+      tone: "rose",
+      icon: <svg {...iconProps} className={iconCls}><circle cx="12" cy="12" r="10" /><path d="M8 12h8" /></svg>,
+    },
+    {
+      label: "Active Ads",
+      value: fmt(activeAds),
+      sub: previousMonthLoading ? `of ${allAds.length} total` : `${comparisonSummary.activeAds} last month • ${formatDelta(activeAds, comparisonSummary.activeAds)}`,
+      tone: "emerald",
+      icon: <svg {...iconProps} className={iconCls}><path d="M5 12h14" /><path d="m13 6 6 6-6 6" /></svg>,
+    },
+    {
+      label: "Ads Ran In Period",
+      value: fmt(adsInPeriod),
+      sub: previousMonthLoading ? "Ads with delivery in this range" : `${comparisonSummary.adsInPeriod} last month • ${formatDelta(adsInPeriod, comparisonSummary.adsInPeriod)}`,
+      tone: "blue",
+      icon: <svg {...iconProps} className={iconCls}><path d="M3 12h18" /><path d="M12 3v18" /></svg>,
+    },
+  ];
 
   const handleSortTab = (key: SortKey) => {
     setSortKey(key);
@@ -1606,292 +1828,49 @@ const performanceReels = allAds.filter((ad) => ad.isVideo || ad.insights.videoVi
         </div>
       </div>
 
-      {/* Summary Cards — Row 1 */}
-     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-3">
-  <SummaryCard
-    label="Total Spend"
-    value={fmtMoney(totalSpend)}
-    sub={
-      previousMonthLoading
-        ? "Loading previous-month comparison..."
-        : comparisonSub(
-            `${comparisonRange.from} to ${comparisonRange.to}`,
-            totalSpend,
-            comparisonSummary.totalSpend,
-            fmtMoney
-          )
-    }
-    dark={dark}
-    icon={<svg {...iconProps} className={iconCls}><line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>}
-  />
-  <SummaryCard
-    label="Total Reach"
-    value={fmt(totalReach)}
-    sub={
-      previousMonthLoading
-        ? "Loading previous-month comparison..."
-        : comparisonSub(
-            `${comparisonRange.from} to ${comparisonRange.to}`,
-            totalReach,
-            comparisonSummary.totalReach,
-            (value) => fmt(value)
-          )
-    }
-    dark={dark}
-    icon={<svg {...iconProps} className={iconCls}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>}
-  />
-  <SummaryCard
-    label="Impressions"
-    value={fmt(totalImpressions)}
-    sub={
-      previousMonthLoading
-        ? "Loading previous-month comparison..."
-        : comparisonSub(
-            `${comparisonRange.from} to ${comparisonRange.to}`,
-            totalImpressions,
-            comparisonSummary.totalImpressions,
-            (value) => fmt(value)
-          )
-    }
-    dark={dark}
-    icon={<svg {...iconProps} className={iconCls}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>}
-  />
-  <SummaryCard
-    label="Clicks"
-    value={fmt(totalClicks)}
-    sub={
-      previousMonthLoading
-        ? "Loading previous-month comparison..."
-        : comparisonSub(
-            `${comparisonRange.from} to ${comparisonRange.to}`,
-            totalClicks,
-            comparisonSummary.totalClicks,
-            (value) => fmt(value)
-          )
-    }
-    dark={dark}
-    icon={<svg {...iconProps} className={iconCls}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg>}
-  />
-  <SummaryCard
-    label="CTR"
-    value={fmtPct(overallCTR)}
-    sub={
-      previousMonthLoading
-        ? "Loading previous-month comparison..."
-        : comparisonSub(
-            `${comparisonRange.from} to ${comparisonRange.to}`,
-            overallCTR,
-            comparisonSummary.overallCTR,
-            (value) => fmtPct(value)
-          )
-    }
-    accent={overallCTR >= 1.5 ? (dark ? "text-emerald-400" : "text-emerald-600") : overallCTR < 0.8 ? (dark ? "text-red-400" : "text-red-600") : (dark ? "text-yellow-400" : "text-yellow-600")}
-    dark={dark}
-    icon={<svg {...iconProps} className={iconCls}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></svg>}
-  />
-  <SummaryCard
-    label="CPM"
-    value={fmtMoney(overallCPM)}
-    sub={
-      previousMonthLoading
-        ? "Loading previous-month comparison..."
-        : comparisonSub(
-            `${comparisonRange.from} to ${comparisonRange.to}`,
-            overallCPM,
-            comparisonSummary.overallCPM,
-            fmtMoney
-          )
-    }
-    dark={dark}
-    icon={<svg {...iconProps} className={iconCls}><rect x="1" y="4" width="22" height="16" rx="2" ry="2" /><line x1="1" y1="10" x2="23" y2="10" /></svg>}
-  />
-  <SummaryCard
-    label="CPC"
-    value={overallCPC > 0 ? fmtMoney(overallCPC) : "—"}
-    sub={
-      previousMonthLoading
-        ? "Loading previous-month comparison..."
-        : comparisonSub(
-            `${comparisonRange.from} to ${comparisonRange.to}`,
-            overallCPC,
-            comparisonSummary.overallCPC,
-            fmtMoney
-          )
-    }
-    dark={dark}
-    icon={<svg {...iconProps} className={iconCls}><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="16" /><line x1="8" y1="12" x2="16" y2="12" /></svg>}
-  />
-  <SummaryCard
-    label="Active Ads"
-    value={String(activeAds)}
-    sub={
-      previousMonthLoading
-        ? `of ${allAds.length} total`
-        : `${comparisonSummary.activeAds} last month • ${formatDelta(activeAds, comparisonSummary.activeAds)}`
-    }
-    accent={dark ? "text-blue-400" : "text-blue-600"}
-    dark={dark}
-    icon={<svg {...iconProps} className={iconCls}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg>}
-  />
-  <SummaryCard
-    label="Ads Ran In Period"
-    value={String(adsInPeriod)}
-    sub={
-      previousMonthLoading
-        ? "Ads with spend or impressions in this range"
-        : `${comparisonSummary.adsInPeriod} last month â€¢ ${formatDelta(adsInPeriod, comparisonSummary.adsInPeriod)}`
-    }
-    accent={dark ? "text-cyan-400" : "text-cyan-600"}
-    dark={dark}
-    icon={<svg {...iconProps} className={iconCls}><path d="M3 12h18" /><path d="M12 3v18" /></svg>}
-  />
-</div>
+      <section className="flex flex-col gap-4">
+        <ReportSectionHeading
+          title="Paid Media Overview"
+          detail={`${adsInPeriod} ad${adsInPeriod === 1 ? "" : "s"} ran`}
+          tone="blue"
+          dark={dark}
+        />
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
+          {deliveryCards.map((card) => (
+            <SummaryCard key={card.label} {...card} dark={dark} />
+          ))}
+        </div>
+      </section>
 
-<div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-  <SummaryCard
-    label="Total Leads"
-    value={totalLeads > 0 ? fmt(totalLeads) : "—"}
-    sub={
-      previousMonthLoading
-        ? "Loading previous-month comparison..."
-        : comparisonSub(
-            `${comparisonRange.from} to ${comparisonRange.to}`,
-            totalLeads,
-            comparisonSummary.totalLeads,
-            (value) => fmt(value)
-          )
-    }
-    accent={dark ? "text-emerald-400" : "text-emerald-600"}
-    dark={dark}
-    icon={
-      <svg {...iconProps} className={dark ? "text-emerald-400" : "text-emerald-600"}>
-        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-        <circle cx="12" cy="7" r="4" />
-      </svg>
-    }
-  />
-  <SummaryCard
-    label="Cost Per Lead"
-    value={overallCPL > 0 ? fmtMoney(overallCPL) : "—"}
-    sub={
-      previousMonthLoading
-        ? "Loading previous-month comparison..."
-        : comparisonSub(
-            `${comparisonRange.from} to ${comparisonRange.to}`,
-            overallCPL,
-            comparisonSummary.overallCPL,
-            fmtMoney
-          )
-    }
-    accent={
-      overallCPL > 0
-        ? overallCPL < 100
-          ? dark ? "text-emerald-400" : "text-emerald-600"
-          : overallCPL < 300
-            ? dark ? "text-yellow-400" : "text-yellow-600"
-            : dark ? "text-red-400" : "text-red-600"
-        : undefined
-    }
-    dark={dark}
-    icon={
-      <svg {...iconProps} className={dark ? "text-emerald-400" : "text-emerald-600"}>
-        <line x1="12" y1="1" x2="12" y2="23" />
-        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-      </svg>
-    }
-  />
-  <SummaryCard
-    label="Landing Page Views"
-    value={totalLandingPageViews > 0 ? fmt(totalLandingPageViews) : "—"}
-    sub={
-      previousMonthLoading
-        ? "Loading previous-month comparison..."
-        : comparisonSub(
-            `${comparisonRange.from} to ${comparisonRange.to}`,
-            totalLandingPageViews,
-            comparisonSummary.totalLandingPageViews,
-            (value) => fmt(value)
-          )
-    }
-    dark={dark}
-    icon={
-      <svg {...iconProps} className={iconCls}>
-        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-        <polyline points="15 3 21 3 21 9" />
-        <line x1="10" y1="14" x2="21" y2="3" />
-      </svg>
-    }
-  />
-  <SummaryCard
-    label="Video Views"
-    value={totalVideoViews > 0 ? fmt(totalVideoViews) : "â€”"}
-    sub={
-      previousMonthLoading
-        ? "Loading previous-month comparison..."
-        : comparisonSub(
-            `${comparisonRange.from} to ${comparisonRange.to}`,
-            totalVideoViews,
-            comparisonSummary.totalVideoViews,
-            (value) => fmt(value)
-          )
-    }
-    accent={dark ? "text-purple-400" : "text-purple-600"}
-    dark={dark}
-    icon={
-      <svg {...iconProps} className={dark ? "text-purple-400" : "text-purple-600"}>
-        <polygon points="5 3 19 12 5 21 5 3" />
-      </svg>
-    }
-  />
-  <SummaryCard
-    label="Hold Rate"
-    value={avgVideoHoldRate50 > 0 ? `${fmtPct(avgVideoHoldRate50)} (${fmt(totalHeldVideoPeople)})` : "â€”"}
-    sub={
-      previousMonthLoading
-        ? "Loading previous-month comparison..."
-        : comparisonSub(
-            `${comparisonRange.from} to ${comparisonRange.to}`,
-            avgVideoHoldRate50,
-            comparisonSummary.avgVideoHoldRate50,
-            (value) => fmtPct(value)
-          )
-    }
-    accent={
-      avgVideoHoldRate50 >= 35
-        ? dark ? "text-emerald-400" : "text-emerald-600"
-        : avgVideoHoldRate50 >= 20
-          ? dark ? "text-yellow-400" : "text-yellow-600"
-          : dark ? "text-red-400" : "text-red-600"
-    }
-    dark={dark}
-    icon={
-      <svg {...iconProps} className={iconCls}>
-        <circle cx="12" cy="12" r="10" />
-        <path d="M8 12h8" />
-      </svg>
-    }
-  />
-  <SummaryCard
-    label="Post Engagements"
-    value={totalPostEngagements > 0 ? fmt(totalPostEngagements) : "—"}
-    sub={
-      previousMonthLoading
-        ? "Loading previous-month comparison..."
-        : comparisonSub(
-            `${comparisonRange.from} to ${comparisonRange.to}`,
-            totalPostEngagements,
-            comparisonSummary.totalPostEngagements,
-            (value) => fmt(value)
-          )
-    }
-    dark={dark}
-    icon={
-      <svg {...iconProps} className={iconCls}>
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-      </svg>
-    }
-  />
-</div>
+      <section className="flex flex-col gap-4">
+        <ReportSectionHeading
+          title="Paid Engagement"
+          detail={`${fmt(totalPostEngagements)} total actions`}
+          tone="emerald"
+          dark={dark}
+        />
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
+          {engagementCards.map((card) => (
+            <SummaryCard key={card.label} {...card} dark={dark} />
+          ))}
+        </div>
+      </section>
+
+      <section className="flex flex-col gap-4">
+        <ReportSectionHeading
+          title="Efficiency & Conversion"
+          detail={`${activeAds} active of ${allAds.length} total ads`}
+          tone="violet"
+          dark={dark}
+        />
+        <div className={`rounded-[28px] border p-4 sm:p-5 ${dark ? "border-violet-300/10 bg-[linear-gradient(145deg,rgba(29,22,52,0.72),rgba(10,14,28,0.94))]" : "border-violet-100 bg-[linear-gradient(145deg,#f5f3ff,#ffffff)]"}`}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-8 gap-3">
+            {efficiencyCards.map((card) => (
+              <SummaryCard key={card.label} {...card} dark={dark} />
+            ))}
+          </div>
+        </div>
+      </section>
 
       <PerformanceReelsPanel
         reels={performanceReels}

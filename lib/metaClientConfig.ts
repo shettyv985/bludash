@@ -23,7 +23,6 @@ const CLIENT_NAMES: Record<string, string> = {
   Blusteak_Media: "Blusteak Media",
   CHAKOLAS: "CHAKOLAS",
   Care_n_Cure_Pharmacy: "Care n Cure Pharmacy",
-  Ekabrahmaa: "Ekabrahmaa",
   GEOJIT: "GEOJIT",
   Heal_in_Kerala: "Heal in Kerala",
   HALWAHAWELI: "HALWA HAWELI",
